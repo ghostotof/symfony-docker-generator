@@ -2,9 +2,9 @@
 
 Générateur de stack Docker clé-en-main pour projets Symfony.
 
-Un seul script crée un projet complet avec **FrankenPHP**, **PostgreSQL**,
-**RabbitMQ** et une suite d'observabilité **Prometheus · Loki · Tempo · Grafana**,
-le tout configuré et prêt à démarrer.
+Un seul script crée un projet complet avec **FrankenPHP** (PHP 8.4 · Alpine),
+**PostgreSQL**, **RabbitMQ** et une suite d'observabilité
+**Prometheus · Loki · Tempo · Grafana**, le tout configuré et prêt à démarrer.
 
 ## Prérequis
 
@@ -28,8 +28,11 @@ bash generate-docker-symfony monprojet
 # Symfony fullstack Twig (pas de Next.js)
 bash generate-docker-symfony monprojet --no-front
 
-# Sans observabilité, PHP 8.4
-bash generate-docker-symfony monprojet --no-obs --php 8.4
+# Sans observabilité
+bash generate-docker-symfony monprojet --no-obs
+
+# Épingler une version FrankenPHP précise
+bash generate-docker-symfony monprojet --frankenphp 1.4
 
 # Forcer un bloc de ports précis (utile si plusieurs projets tournent)
 bash generate-docker-symfony monprojet --port-base 9000
@@ -43,9 +46,9 @@ bash generate-docker-symfony monprojet --dry-run
 | Option                | Description                                                        |
 |-----------------------|--------------------------------------------------------------------|
 | `--port-base N`       | Premier port du bloc alloué (défaut : auto-détection)             |
-| `--php VERSION`       | Version PHP dans FrankenPHP (défaut : `8.3`)                      |
+| `--php VERSION`       | Version PHP dans FrankenPHP (défaut : `8.4`)                      |
 | `--node VERSION`      | Version Node.js pour Next.js (défaut : `22`)                      |
-| `--frankenphp VER`    | Version FrankenPHP (défaut : `1.2`)                               |
+| `--frankenphp VER`    | Version FrankenPHP (défaut : `1`, dernier 1.x stable)             |
 | `--env ENV`           | Environnement initial `dev` ou `prod` (défaut : `dev`)            |
 | `--no-front`          | Supprime Next.js — Symfony sert le HTML via Twig                  |
 | `--no-obs`            | Supprime Prometheus / Loki / Tempo / Grafana                      |
