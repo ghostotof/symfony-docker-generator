@@ -1,0 +1,11 @@
+# Projets générés — chacun a son propre dépôt Git
+projects/
+
+# Variables d'environnement locales
+.env
+.env.local
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db

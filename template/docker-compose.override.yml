@@ -1,0 +1,32 @@
+version: "3.9"
+# Chargé automatiquement en développement
+
+services:
+
+  back:
+    build:
+      target: dev
+    environment:
+      APP_ENV:      dev
+      APP_DEBUG:    "1"
+      XDEBUG_MODE:  debug
+      OTEL_TRACES_SAMPLER: always_on   # tracer 100% des requêtes en dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  front:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+
+  # Mailpit — capture e-mails en dev
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - backend

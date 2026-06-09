@@ -1,0 +1,63 @@
+groups:
+  - name: myapp.rules
+    rules:
+
+      # ── Disponibilité ──────────────────────────────────
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} indisponible"
+          description: "Le scrape Prometheus échoue depuis plus d'1 minute."
+
+      # ── FrankenPHP / Caddy ─────────────────────────────
+      - alert: HighHTTPErrorRate
+        expr: |
+          sum(rate(caddy_http_requests_total{status=~"5.."}[5m])) by (handler)
+          /
+          sum(rate(caddy_http_requests_total[5m])) by (handler)
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taux d'erreurs HTTP élevé ({{ $value | humanizePercentage }})"
+
+      - alert: SlowHTTPResponses
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(caddy_http_request_duration_seconds_bucket[5m])) by (le, handler)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latence HTTP > 2s sur {{ $labels.handler }}"
+
+      # ── PostgreSQL ─────────────────────────────────────
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL injoignable"
+
+      # ── RabbitMQ ───────────────────────────────────────
+      - alert: RabbitMQQueueDepth
+        expr: rabbitmq_queue_messages_ready > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "File RabbitMQ > 1000 messages ({{ $value }})"
+
+      - alert: RabbitMQConsumerAbsent
+        expr: rabbitmq_queue_consumers == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Aucun consumer sur la file {{ $labels.queue }}"
