@@ -34,7 +34,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 # Symfony CLI — installateur universel (compatible Alpine/musl)
 RUN set -eux; \
-    curl -1sLf https://get.symfony.com/cli/installer | sh; \
+    curl -1sLf https://get.symfony.com/cli/installer | bash; \
     SYMFONY_BIN=$(find /root -name symfony -maxdepth 4 -type f | head -n1); \
     install -m 0755 "$SYMFONY_BIN" /usr/local/bin/symfony; \
     rm -rf /root/.symfony*
