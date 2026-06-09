@@ -2,26 +2,20 @@
 #  FrankenPHP — image officielle (embarque Caddy + PHP)
 #  https://frankenphp.dev/docs/docker/
 # ═══════════════════════════════════════════════════════════
-ARG FRANKENPHP_VERSION=1.2
+ARG FRANKENPHP_VERSION=1
 
 # ── Stage base ──────────────────────────────────────────
-FROM dunglas/frankenphp:${FRANKENPHP_VERSION}-php8.3-bookworm AS base
+FROM dunglas/frankenphp:${FRANKENPHP_VERSION}-php8.4-alpine AS base
 
 LABEL maintainer="your-team@example.com"
 
-# Dépendances système
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Outils système (install-php-extensions gère les dépendances de build/runtime des extensions)
+RUN apk add --no-cache \
+        bash \
+        curl \
         git \
         unzip \
-        libpq-dev \
-        libicu-dev \
-        libzip-dev \
-        libxml2-dev \
-        libonig-dev \
-        librabbitmq-dev \
-        libssl-dev \
-        acl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+        acl
 
 # Extensions PHP
 RUN install-php-extensions \
@@ -38,10 +32,12 @@ RUN install-php-extensions \
 # Composer depuis image officielle
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-# Symfony CLI
-RUN curl -1sLf 'https://dl.cloudsmith.io/public/symfony/stable/setup.deb.sh' | bash \
-    && apt-get install -y symfony-cli \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Symfony CLI — installateur universel (compatible Alpine/musl)
+RUN set -eux; \
+    curl -1sLf https://get.symfony.com/cli/installer | sh; \
+    SYMFONY_BIN=$(find /root -name symfony -maxdepth 4 -type f | head -n1); \
+    install -m 0755 "$SYMFONY_BIN" /usr/local/bin/symfony; \
+    rm -rf /root/.symfony*
 
 WORKDIR /var/www/app
 

@@ -48,7 +48,7 @@ PROJECT_NAME=""
 PORT_BASE=0           # 0 = auto-détection du prochain bloc libre
 PHP_VERSION="8.4"
 NODE_VERSION="22"
-FRANKENPHP_VERSION="1.2"
+FRANKENPHP_VERSION="1"
 APP_ENV="dev"
 WITH_OBS=true         # inclure Prometheus/Loki/Tempo/Grafana
 WITH_FRONT=true       # inclure le service Next.js
