@@ -11,7 +11,7 @@
 
 | Service      | Image                         | Port par défaut |
 |--------------|-------------------------------|-----------------|
-| back         | dunglas/frankenphp + PHP 8.3  | :8080           |
+| back         | dunglas/frankenphp + PHP 8.4 (Alpine) | :8080    |
 | front        | node:22-bookworm-slim         | :3001           |
 | db           | postgres:16-alpine            | :5432           |
 | pgadmin      | dpage/pgadmin4                | :5052           |
@@ -46,8 +46,8 @@
 |---------------------|----------------------------------------------------|
 | `--no-front`        | Supprime Next.js — Symfony sert le HTML via Twig   |
 | `--no-obs`          | Supprime Prometheus / Loki / Tempo / Grafana       |
-| `--php VERSION`     | Change la version PHP (défaut : 8.3)               |
+| `--php VERSION`     | Change la version PHP (défaut : 8.4)               |
 | `--node VERSION`    | Change la version Node.js (défaut : 22)            |
-| `--frankenphp VER`  | Change la version FrankenPHP (défaut : 1.2)        |
+| `--frankenphp VER`  | Change la version FrankenPHP (défaut : 1, dernier 1.x stable) |
 | `--port-base N`     | Fixe le premier port du bloc (défaut : auto)       |
 | `--dry-run`         | Affiche ce qui serait fait sans rien créer         |
