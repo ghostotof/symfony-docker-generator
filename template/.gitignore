@@ -10,3 +10,4 @@ backups/
 *.dump
 .DS_Store
 Thumbs.db
+db/pgadmin/data/

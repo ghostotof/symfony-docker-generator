@@ -45,7 +45,7 @@ services:
       PGADMIN_CONFIG_SERVER_MODE:         "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - ./db/pgadmin/data:/var/lib/pgadmin
       - ./db/pgadmin/servers.json:/pgadmin4/servers.json:ro
     ports:
       - "${PGADMIN_PORT}:80"
@@ -284,7 +284,6 @@ services:
 # ─── Volumes ────────────────────────────────────────────
 volumes:
   db_data:
-  pgadmin_data:
   rabbitmq_data:
   back_vendor:
   front_node_modules:
