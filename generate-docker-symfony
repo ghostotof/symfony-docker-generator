@@ -53,6 +53,7 @@ APP_ENV="dev"
 WITH_OBS=false        # inclure Prometheus/Loki/Tempo/Grafana (opt-in via --with-obs)
 WITH_FRONT=false      # inclure Next.js séparé (opt-in via --spa)
                       # false → Symfony sert le HTML via Twig (mode fullstack, défaut)
+NODE_EXPLICIT=false   # true si --node est explicitement passé
 DRY_RUN=false
 GIT_INIT=true
 FORCE=false
@@ -75,12 +76,13 @@ ${W}Arguments :${NC}
 ${W}Options :${NC}
   ${C}--port-base N${NC}         Premier port du bloc (défaut: auto, bloc de ${PORT_SLOTS} ports)
   ${C}--php VERSION${NC}         Version PHP FrankenPHP (défaut: ${PHP_VERSION})
-  ${C}--node VERSION${NC}        Version Node.js (défaut: ${NODE_VERSION})
+  ${C}--node VERSION${NC}        Version Node.js pour le container Next.js (défaut: ${NODE_VERSION})
+                        Uniquement valide avec --spa
   ${C}--frankenphp VERSION${NC}  Version FrankenPHP (défaut: ${FRANKENPHP_VERSION})
   ${C}--env ENV${NC}             Environnement initial dev|prod (défaut: ${APP_ENV})
   ${C}--with-obs${NC}            Inclure Prometheus / Loki / Tempo / Grafana
   ${C}--spa${NC}                 Inclure Next.js — Symfony expose une API JSON, Next.js gère le HTML
-                        Requiert --node si version non défaut
+                        Node.js ${NODE_VERSION} par défaut (surcharger avec --node VERSION)
   ${C}--no-git${NC}              Ne pas initialiser de dépôt Git
   ${C}--force${NC}               Écraser le répertoire de destination s'il existe
   ${C}--dry-run${NC}             Afficher ce qui serait fait sans rien créer
@@ -94,12 +96,14 @@ ${W}Modes frontend :${NC}
   ${C}--spa${NC}                 Symfony = API JSON  +  Next.js = SPA/SSR React
                         → Service front ajouté, symfony new minimal (sans --webapp)
                         → Paquets API : api-platform, lexik/jwt, nelmio/cors
+                        → Node.js ${NODE_VERSION} par défaut (--node VERSION pour changer)
 
 ${W}Exemples :${NC}
   generate-docker-symfony monprojet
   generate-docker-symfony monprojet --port-base 8100
   generate-docker-symfony monprojet --php 8.4 --with-obs
   generate-docker-symfony monprojet --spa
+  generate-docker-symfony monprojet --spa --node 20
   generate-docker-symfony monprojet --dry-run
 
 ${W}Structure produite :${NC}
@@ -123,7 +127,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)      usage; exit 0 ;;
         --port-base)    PORT_BASE="$2"; shift 2 ;;
         --php)          PHP_VERSION="$2"; shift 2 ;;
-        --node)         NODE_VERSION="$2"; shift 2 ;;
+        --node)         NODE_VERSION="$2"; NODE_EXPLICIT=true; shift 2 ;;
         --frankenphp)   FRANKENPHP_VERSION="$2"; shift 2 ;;
         --env)          APP_ENV="$2"; shift 2 ;;
         --with-obs)     WITH_OBS=true; shift ;;
@@ -149,9 +153,9 @@ if [[ ! "$PROJECT_NAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
        → Exemples valides : monprojet, my-shop, api_v2, blog2025"
 fi
 
-# --node sans --spa n'a pas de sens
-if [[ "$WITH_FRONT" == false ]] && [[ "$NODE_VERSION" != "22" ]]; then
-    die "--node nécessite --spa (pas de container Node sans frontend séparé)"
+# --node sans --spa n'a pas de sens (quel que soit la valeur passée)
+if [[ "$NODE_EXPLICIT" == true ]] && [[ "$WITH_FRONT" == false ]]; then
+    die "--node nécessite --spa (pas de container Node en mode fullstack)"
 fi
 
 PROJECT_SLUG="${PROJECT_NAME}"
