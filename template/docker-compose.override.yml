@@ -20,13 +20,13 @@ services:
     environment:
       NODE_ENV: development
 
-  # Mailpit — capture e-mails en dev
-  mailpit:
+  # Capture e-mails en dev
+  mail:
     image: axllent/mailpit:latest
-    container_name: ${COMPOSE_PROJECT_NAME}_mailpit
+    container_name: ${COMPOSE_PROJECT_NAME}_mail
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${MAIL_MYAPP_SMTP_PORT}:1025"
+      - "${MAIL_MYAPP_UI_PORT}:8025"
     networks:
       - backend

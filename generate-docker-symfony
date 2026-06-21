@@ -8,8 +8,8 @@
 #  Exemples :
 #    bash generate-docker-symfony monprojet
 #    bash generate-docker-symfony monprojet --port-base 8100
-#    bash generate-docker-symfony monprojet --php 8.4 --node 22 --no-obs
-#    bash generate-docker-symfony monprojet --no-front   ← Symfony fullstack (Twig)
+#    bash generate-docker-symfony monprojet --php 8.4 --node 22 --with-obs
+#    bash generate-docker-symfony monprojet --spa  ← API JSON + Next.js
 #    bash generate-docker-symfony monprojet --port-base 8200 --dry-run
 #
 #  Le projet est créé dans le répertoire courant de l'utilisateur :
@@ -50,9 +50,10 @@ PHP_VERSION="8.4"
 NODE_VERSION="22"
 FRANKENPHP_VERSION="1"
 APP_ENV="dev"
-WITH_OBS=true         # inclure Prometheus/Loki/Tempo/Grafana
-WITH_FRONT=true       # inclure le service Next.js
-                      # false → Symfony sert le HTML via Twig (mode fullstack)
+WITH_OBS=false        # inclure Prometheus/Loki/Tempo/Grafana (opt-in via --with-obs)
+WITH_FRONT=false      # inclure Next.js séparé (opt-in via --spa)
+                      # false → Symfony sert le HTML via Twig (mode fullstack, défaut)
+NODE_EXPLICIT=false   # true si --node est explicitement passé
 DRY_RUN=false
 GIT_INIT=true
 FORCE=false
@@ -60,7 +61,8 @@ FORCE=false
 # ─── Ports : offsets depuis PORT_BASE ────────────────────────────────────────
 # +0 BACK_PORT   +1 FRONT_PORT   +2 PGADMIN   +3 RABBITMQ
 # +4 PROMETHEUS  +5 LOKI         +6 TEMPO      +7 GRAFANA
-PORT_SLOTS=8
+# +8 MAIL_SMTP (→ 1025)          +9 MAIL_UI (→ 8025)
+PORT_SLOTS=10
 
 # ─── Usage ───────────────────────────────────────────────────────────────────
 usage() {
@@ -75,29 +77,34 @@ ${W}Arguments :${NC}
 ${W}Options :${NC}
   ${C}--port-base N${NC}         Premier port du bloc (défaut: auto, bloc de ${PORT_SLOTS} ports)
   ${C}--php VERSION${NC}         Version PHP FrankenPHP (défaut: ${PHP_VERSION})
-  ${C}--node VERSION${NC}        Version Node.js (défaut: ${NODE_VERSION})
+  ${C}--node VERSION${NC}        Version Node.js pour le container Next.js (défaut: ${NODE_VERSION})
+                        Uniquement valide avec --spa
   ${C}--frankenphp VERSION${NC}  Version FrankenPHP (défaut: ${FRANKENPHP_VERSION})
   ${C}--env ENV${NC}             Environnement initial dev|prod (défaut: ${APP_ENV})
-  ${C}--no-obs${NC}              Exclure Prometheus / Loki / Tempo / Grafana
-  ${C}--no-front${NC}            Exclure Next.js — Symfony gère le HTML (Twig/fullstack)
-                        Incompatible avec --node
+  ${C}--with-obs${NC}            Inclure Prometheus / Loki / Tempo / Grafana
+  ${C}--spa${NC}                 Inclure Next.js — Symfony expose une API JSON, Next.js gère le HTML
+                        Node.js ${NODE_VERSION} par défaut (surcharger avec --node VERSION)
   ${C}--no-git${NC}              Ne pas initialiser de dépôt Git
   ${C}--force${NC}               Écraser le répertoire de destination s'il existe
   ${C}--dry-run${NC}             Afficher ce qui serait fait sans rien créer
   ${C}-h, --help${NC}            Afficher cette aide
 
 ${W}Modes frontend :${NC}
-  ${C}(défaut)${NC}              Symfony = API JSON  +  Next.js = SPA/SSR React
-  ${C}--no-front${NC}            Symfony = API JSON  +  Twig templates
-                        → Service front supprimé, FrankenPHP sert
-                          directement les assets/templates Symfony
-                        → Le Caddyfile est adapté (asset caching, CORS retiré)
-                        → Les paquets Symfony Twig sont pré-listés dans bootstrap
+  ${C}(défaut)${NC}              Symfony = fullstack Twig  (pas de container Next.js)
+                        → FrankenPHP sert les assets/templates Symfony
+                        → Caddyfile adapté (asset caching, CORS retiré)
+                        → symfony new --webapp (Twig, Form, AssetMapper inclus)
+  ${C}--spa${NC}                 Symfony = API JSON  +  Next.js = SPA/SSR React
+                        → Service front ajouté, symfony new minimal (sans --webapp)
+                        → Paquets API : api-platform, lexik/jwt, nelmio/cors
+                        → Node.js ${NODE_VERSION} par défaut (--node VERSION pour changer)
 
 ${W}Exemples :${NC}
   generate-docker-symfony monprojet
   generate-docker-symfony monprojet --port-base 8100
-  generate-docker-symfony monprojet --php 8.4 --no-obs --no-front
+  generate-docker-symfony monprojet --php 8.4 --with-obs
+  generate-docker-symfony monprojet --spa
+  generate-docker-symfony monprojet --spa --node 20
   generate-docker-symfony monprojet --dry-run
 
 ${W}Structure produite :${NC}
@@ -107,7 +114,7 @@ ${W}Structure produite :${NC}
       ├── docker-compose.yaml
       ├── Makefile
       ├── back/app/        ← projet Symfony
-      ├── front/app/       ← projet Next.js (absent si --no-front)
+      ├── front/app/       ← projet Next.js (présent si --spa)
       └── ...
 
 EOF
@@ -121,11 +128,11 @@ while [[ $# -gt 0 ]]; do
         -h|--help)      usage; exit 0 ;;
         --port-base)    PORT_BASE="$2"; shift 2 ;;
         --php)          PHP_VERSION="$2"; shift 2 ;;
-        --node)         NODE_VERSION="$2"; shift 2 ;;
+        --node)         NODE_VERSION="$2"; NODE_EXPLICIT=true; shift 2 ;;
         --frankenphp)   FRANKENPHP_VERSION="$2"; shift 2 ;;
         --env)          APP_ENV="$2"; shift 2 ;;
-        --no-obs)       WITH_OBS=false; shift ;;
-        --no-front)     WITH_FRONT=false; shift ;;
+        --with-obs)     WITH_OBS=true; shift ;;
+        --spa) WITH_FRONT=true; shift ;;
         --no-git)       GIT_INIT=false; shift ;;
         --force)        FORCE=true; shift ;;
         --dry-run)      DRY_RUN=true; shift ;;
@@ -141,27 +148,27 @@ done
 # ─── Validation ───────────────────────────────────────────────────────────────
 [[ -z "$PROJECT_NAME" ]] && die "Le nom du projet est requis. (--help pour l'aide)"
 
-if [[ ! "$PROJECT_NAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+if [[ ! "$PROJECT_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
     die "Nom invalide : '${PROJECT_NAME}'
-       → Minuscules, chiffres, tirets et underscores uniquement, commençant par une lettre.
-       → Exemples valides : monprojet, my-shop, api_v2, blog2025"
+       → Lettres (majuscules/minuscules), chiffres, tirets et underscores, commençant par une lettre.
+       → Exemples valides : monprojet, MyShop, myApp, api_v2, My-Blog2025"
 fi
 
-# --no-front + --node n'a pas de sens
-if [[ "$WITH_FRONT" == false ]] && [[ "$NODE_VERSION" != "22" ]]; then
-    die "--no-front et --node sont incompatibles (pas de container Node sans frontend)"
+# --node sans --spa n'a pas de sens (quel que soit la valeur passée)
+if [[ "$NODE_EXPLICIT" == true ]] && [[ "$WITH_FRONT" == false ]]; then
+    die "--node nécessite --spa (pas de container Node en mode fullstack)"
 fi
 
-PROJECT_SLUG="${PROJECT_NAME}"
-PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-z])/\U\2/g')"
-PROJECT_UPPER="$(echo "${PROJECT_NAME}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+PROJECT_SLUG="$(echo "${PROJECT_NAME}" | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]')"
+PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g' | sed -E 's/^[a-z]/\u&/')"
+PROJECT_UPPER="$(echo "${PROJECT_SLUG}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
 
 # ─── Vérification du template ────────────────────────────────────────────────
 [[ -d "$TEMPLATE_DIR" ]] || die "Template introuvable : ${TEMPLATE_DIR}
        → Ce script doit être exécuté depuis la racine de symfony-docker-generator/"
 
 # ─── Répertoire de destination ───────────────────────────────────────────────
-DEST_DIR="${CALLER_DIR}/${PROJECT_SLUG}"
+DEST_DIR="${CALLER_DIR}/${PROJECT_NAME}"
 
 if [[ -d "$DEST_DIR" ]]; then
     if [[ "$FORCE" == true ]]; then
@@ -209,6 +216,8 @@ P_PROMETHEUS=$(( PORT_BASE + 4 ))
 P_LOKI=$(( PORT_BASE + 5 ))
 P_TEMPO=$(( PORT_BASE + 6 ))
 P_GRAFANA=$(( PORT_BASE + 7 ))
+P_MAIL_SMTP=$(( PORT_BASE + 8 ))
+P_MAIL_UI=$(( PORT_BASE + 9 ))
 
 # ─── Génération des secrets ───────────────────────────────────────────────────
 gen_secret() {
@@ -230,14 +239,14 @@ GRAFANA_PASSWORD=$(gen_secret | head -c 24)
 title "Nouveau projet : ${PROJECT_PASCAL}"
 echo ""
 printf "  %-28s %s\n" "Nom du projet :"         "${PROJECT_SLUG}"
-printf "  %-28s %s\n" "Répertoire :"            "${DEST_DIR}"
+printf "  %-29s %s\n" "Répertoire :"            "${DEST_DIR}"
 printf "  %-28s %s\n" "PHP / FrankenPHP :"      "${PHP_VERSION} / ${FRANKENPHP_VERSION}"
 if [[ "$WITH_FRONT" == true ]]; then
 printf "  %-28s %s\n" "Node.js :"               "${NODE_VERSION}"
 fi
 printf "  %-28s %s\n" "Environnement initial :" "${APP_ENV}"
 printf "  %-28s %s\n" "Mode frontend :"         "$([ "$WITH_FRONT" == true ] && echo 'Next.js (SPA/SSR)' || echo 'Symfony fullstack (Twig)')"
-printf "  %-28s %s\n" "Stack observabilité :"   "$([ "$WITH_OBS" == true ]   && echo 'oui' || echo 'non')"
+printf "  %-29s %s\n" "Stack observabilité :"   "$([ "$WITH_OBS" == true ]   && echo 'oui' || echo 'non')"
 printf "  %-28s %s\n" "Init Git :"              "$([ "$GIT_INIT" == true ]   && echo 'oui' || echo 'non')"
 echo ""
 printf "  ${C}%-28s${NC}" "Ports alloués :"
@@ -248,6 +257,8 @@ else
     printf "  back(https):%-5s  pgadmin:%-5s  rabbitmq:%-5s\n" \
         "$P_BACK" "$P_PGADMIN" "$P_RABBIT"
 fi
+printf "  %-28s" ""
+printf "  mail-smtp:%-5s  mail-ui:%-5s\n" "$P_MAIL_SMTP" "$P_MAIL_UI"
 if [[ "$WITH_OBS" == true ]]; then
     printf "  %-28s" ""
     printf "  prometheus:%-5s  loki:%-5s  tempo:%-5s  grafana:%-5s\n" \
@@ -295,7 +306,7 @@ else
     info "Répertoire front/ supprimé (mode Symfony fullstack)"
 fi
 
-# ─── Suppression de l'observabilité si --no-obs ───────────────────────────────
+# ─── Suppression de l'observabilité (par défaut, sauf --with-obs) ────────────
 if [[ "$WITH_OBS" == false ]]; then
     step "Suppression de la stack d'observabilité"
     rm -rf "${DEST_DIR}/observability"
@@ -346,6 +357,7 @@ for f in "${FILES_TO_PATCH[@]}"; do
     replace_in_file "$f" "myapp_queue"            "${PROJECT_SLUG}_queue"
     replace_in_file "$f" "myapp\.rules"           "${PROJECT_SLUG}.rules"
     replace_in_file "$f" "name: myapp$"           "name: ${PROJECT_SLUG}"
+    replace_in_file "$f" "MAIL_MYAPP_"            "MAIL_${PROJECT_UPPER}_"
 done
 
 success "Nom de projet remplacé (myapp → ${PROJECT_SLUG} / MyApp → ${PROJECT_PASCAL})"
@@ -373,7 +385,7 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MODE --no-front : ADAPTATIONS SPÉCIFIQUES
+#  MODE FULLSTACK (défaut, sans --spa) : ADAPTATIONS SPÉCIFIQUES
 # ═══════════════════════════════════════════════════════════════════════════════
 if [[ "$WITH_FRONT" == false ]]; then
     step "Mode Symfony fullstack — suppression du frontend"
@@ -561,10 +573,10 @@ print("  Section 'Frontend Symfony (Twig)' ajoutée au Makefile")
 PYEOF
     success "Makefile mis à jour (section Twig/Assets)"
 
-fi  # fin du bloc --no-front
+fi  # fin du bloc fullstack (sans --spa)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  SUPPRESSION OBS DU docker-compose si --no-obs
+#  SUPPRESSION OBS DU docker-compose (par défaut, sauf --with-obs)
 # ═══════════════════════════════════════════════════════════════════════════════
 if [[ "$WITH_OBS" == false ]]; then
     step "Retrait de l'observabilité du docker-compose"
@@ -619,7 +631,7 @@ FRONT_BLOCK="
 # Le backend FrankenPHP sert directement les templates Twig.
 # Accès HTTPS : https://localhost:${P_BACK}
 # (après la 1ère visite, le navigateur bascule automatiquement via HSTS)
-# Pour activer Next.js : re-générer avec generate-docker-symfony sans --no-front"
+# Pour activer Next.js : re-générer avec generate-docker-symfony --spa"
 fi
 
 OBS_BLOCK=""
@@ -685,6 +697,10 @@ JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
 JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
 JWT_PASSPHRASE=${JWT_PASSPHRASE}
 ${FRONT_BLOCK}
+
+# ── Mail (dev only) ──────────────────────────────────────────────────────────
+MAIL_${PROJECT_UPPER}_SMTP_PORT=${P_MAIL_SMTP}
+MAIL_${PROJECT_UPPER}_UI_PORT=${P_MAIL_UI}
 ${OBS_BLOCK}
 ENV_EOF
 
@@ -835,6 +851,7 @@ echo "  🔧 Backend (FrankenPHP) : https://localhost:\${BACK_PORT}"
 ${FRONT_SUMMARY}
 echo "  🗄️  pgAdmin              : http://localhost:\${PGADMIN_PORT}"
 echo "  🐇 RabbitMQ UI          : http://localhost:\${RABBITMQ_MANAGEMENT_PORT}"
+echo "  📧 Mail UI              : http://localhost:\${MAIL_${PROJECT_UPPER}_UI_PORT}"
 ${OBS_SUMMARY}
 echo ""
 echo "  make help  →  toutes les commandes"
@@ -867,7 +884,7 @@ cat > "${DEST_DIR}/README.md" << README_EOF
 # ${PROJECT_PASCAL}
 
 > ${STACK_DESC}
-> Initialisé le $(date '+%Y-%m-%d') avec \`generate-docker-symfony\`$([ "$WITH_FRONT" == false ] && echo "  \`--no-front\`")
+> Initialisé le $(date '+%Y-%m-%d') avec \`generate-docker-symfony\`$([ "$WITH_FRONT" == true ] && echo "  \`--spa\`")
 
 $([ "$WITH_FRONT" == false ] && cat << 'NOFRONT'
 ## Mode Symfony fullstack
@@ -897,6 +914,7 @@ make bootstrap
 ${FRONT_TABLE_ROW}
 | pgAdmin      | http://localhost:${P_PGADMIN}                   |
 | RabbitMQ UI  | http://localhost:${P_RABBIT}                    |
+| Mail UI      | http://localhost:${P_MAIL_UI}                    |
 ${OBS_TABLE}
 
 ## Commandes
@@ -945,8 +963,9 @@ printf "    %-24s :%-5s  (https://localhost:%s)\n" "Backend HTTPS" "${P_BACK}" "
 if [[ "$WITH_FRONT" == true ]]; then
     printf "    %-24s :%-5s\n" "Frontend (Next.js)" "${P_FRONT}"
 fi
-printf "    %-24s :%-5s\n" "pgAdmin"      "${P_PGADMIN}"
-printf "    %-24s :%-5s\n" "RabbitMQ UI"  "${P_RABBIT}"
+printf "    %-24s :%-5s\n" "pgAdmin"         "${P_PGADMIN}"
+printf "    %-24s :%-5s\n" "RabbitMQ UI"     "${P_RABBIT}"
+printf "    %-24s :%-5s  (UI: http://localhost:%s)\n" "Mail SMTP" "${P_MAIL_SMTP}" "${P_MAIL_UI}"
 if [[ "$WITH_OBS" == true ]]; then
     printf "    %-24s :%-5s\n" "Grafana"    "${P_GRAFANA}"
     printf "    %-24s :%-5s\n" "Prometheus" "${P_PROMETHEUS}"
