@@ -147,10 +147,10 @@ done
 # ─── Validation ───────────────────────────────────────────────────────────────
 [[ -z "$PROJECT_NAME" ]] && die "Le nom du projet est requis. (--help pour l'aide)"
 
-if [[ ! "$PROJECT_NAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+if [[ ! "$PROJECT_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
     die "Nom invalide : '${PROJECT_NAME}'
-       → Minuscules, chiffres, tirets et underscores uniquement, commençant par une lettre.
-       → Exemples valides : monprojet, my-shop, api_v2, blog2025"
+       → Lettres (majuscules/minuscules), chiffres, tirets et underscores, commençant par une lettre.
+       → Exemples valides : monprojet, MyShop, myApp, api_v2, My-Blog2025"
 fi
 
 # --node sans --spa n'a pas de sens (quel que soit la valeur passée)
@@ -158,16 +158,16 @@ if [[ "$NODE_EXPLICIT" == true ]] && [[ "$WITH_FRONT" == false ]]; then
     die "--node nécessite --spa (pas de container Node en mode fullstack)"
 fi
 
-PROJECT_SLUG="${PROJECT_NAME}"
-PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-z])/\U\2/g')"
-PROJECT_UPPER="$(echo "${PROJECT_NAME}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+PROJECT_SLUG="$(echo "${PROJECT_NAME}" | tr '[:upper:]' '[:lower:]')"
+PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g' | sed -E 's/^[a-z]/\u&/')"
+PROJECT_UPPER="$(echo "${PROJECT_SLUG}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
 
 # ─── Vérification du template ────────────────────────────────────────────────
 [[ -d "$TEMPLATE_DIR" ]] || die "Template introuvable : ${TEMPLATE_DIR}
        → Ce script doit être exécuté depuis la racine de symfony-docker-generator/"
 
 # ─── Répertoire de destination ───────────────────────────────────────────────
-DEST_DIR="${CALLER_DIR}/${PROJECT_SLUG}"
+DEST_DIR="${CALLER_DIR}/${PROJECT_NAME}"
 
 if [[ -d "$DEST_DIR" ]]; then
     if [[ "$FORCE" == true ]]; then
