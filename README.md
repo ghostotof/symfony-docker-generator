@@ -3,8 +3,9 @@
 Générateur de stack Docker clé-en-main pour projets Symfony.
 
 Un seul script crée un projet complet avec **FrankenPHP** (PHP 8.4 · Alpine),
-**PostgreSQL**, **RabbitMQ** et une suite d'observabilité
-**Prometheus · Loki · Tempo · Grafana**, le tout configuré et prêt à démarrer.
+**PostgreSQL**, **RabbitMQ** et **Mailpit** (capture mail dev), le tout configuré
+et prêt à démarrer. La stack d'observabilité **Prometheus · Loki · Tempo · Grafana**
+est disponible en option.
 
 ## Prérequis
 
@@ -24,14 +25,20 @@ Le projet est créé dans le **répertoire courant** au moment du lancement du s
 ### Exemples
 
 ```bash
-# Projet standard : Symfony API + Next.js + observabilité
+# Projet Symfony fullstack Twig (défaut)
 bash generate-docker-symfony monprojet
 
-# Symfony fullstack Twig (pas de Next.js)
-bash generate-docker-symfony monprojet --no-front
+# Symfony API JSON + Next.js (SPA/SSR)
+bash generate-docker-symfony monprojet --spa
 
-# Sans observabilité
-bash generate-docker-symfony monprojet --no-obs
+# Avec observabilité (Prometheus / Loki / Tempo / Grafana)
+bash generate-docker-symfony monprojet --with-obs
+
+# Next.js + observabilité
+bash generate-docker-symfony monprojet --spa --with-obs
+
+# Épingler Node.js (uniquement avec --spa)
+bash generate-docker-symfony monprojet --spa --node 20
 
 # Épingler une version FrankenPHP précise
 bash generate-docker-symfony monprojet --frankenphp 1.4
@@ -49,11 +56,11 @@ bash generate-docker-symfony monprojet --dry-run
 |-----------------------|--------------------------------------------------------------------|
 | `--port-base N`       | Premier port du bloc alloué (défaut : auto-détection)             |
 | `--php VERSION`       | Version PHP dans FrankenPHP (défaut : `8.4`)                      |
-| `--node VERSION`      | Version Node.js pour Next.js (défaut : `22`)                      |
+| `--node VERSION`      | Version Node.js pour Next.js, défaut : `22` — requiert `--spa`    |
 | `--frankenphp VER`    | Version FrankenPHP (défaut : `1`, dernier 1.x stable)             |
 | `--env ENV`           | Environnement initial `dev` ou `prod` (défaut : `dev`)            |
-| `--no-front`          | Supprime Next.js — Symfony sert le HTML via Twig                  |
-| `--no-obs`            | Supprime Prometheus / Loki / Tempo / Grafana                      |
+| `--spa`               | Ajoute Next.js — Symfony expose une API JSON, Next.js gère le HTML |
+| `--with-obs`          | Ajoute Prometheus / Loki / Tempo / Grafana                        |
 | `--no-git`            | Ne pas initialiser de dépôt Git dans le projet généré             |
 | `--force`             | Écraser le répertoire de destination s'il existe déjà             |
 | `--dry-run`           | Affiche le récapitulatif sans rien créer                          |
@@ -74,31 +81,18 @@ bash generate-docker-symfony monprojet --dry-run
     │   ├── app/            ← code Symfony (vide, initialisé par bootstrap)
     │   ├── Caddyfile
     │   └── Dockerfile      ← multi-stage dev/prod
-    ├── front/              ← absent si --no-front
+    ├── front/              ← présent uniquement avec --spa
     │   └── app/            ← code Next.js (vide, initialisé par bootstrap)
     ├── db/
     ├── rabbitmq/
-    ├── observability/      ← absent si --no-obs
+    ├── observability/      ← présent uniquement avec --with-obs
     └── scripts/
         └── bootstrap.sh    ← initialise Symfony + Next.js au premier lancement
 ```
 
 ## Modes Symfony
 
-### Mode API + Next.js *(défaut)*
-
-Utilise `symfony new` (skeleton minimal) puis installe :
-
-```
-api-platform/core · symfony/security-bundle · doctrine
-symfony/messenger · symfony/validator · symfony/uid
-nelmio/cors-bundle · lexik/jwt-authentication-bundle
-opentelemetry
-```
-
-Symfony expose uniquement une API JSON. Next.js assure le rendu côté client.
-
-### Mode fullstack Twig *(`--no-front`)*
+### Mode fullstack Twig *(défaut)*
 
 Utilise `symfony new --webapp` (commande officielle Symfony) qui installe
 le meta-package `symfony/webapp` incluant : Twig, AssetMapper, security-bundle,
@@ -112,6 +106,19 @@ Le Caddyfile est adapté : cache agressif des assets, headers de sécurité
 renforcés, pas de CORS inter-domaine.
 `symfony/webpack-encore-bundle` est intentionnellement exclu (nécessite Node.js,
 absent du container FrankenPHP — utiliser AssetMapper à la place).
+
+### Mode API + Next.js *(`--spa`)*
+
+Utilise `symfony new` (skeleton minimal) puis installe :
+
+```
+api-platform/core · symfony/security-bundle · doctrine
+symfony/messenger · symfony/validator · symfony/uid
+nelmio/cors-bundle · lexik/jwt-authentication-bundle
+opentelemetry
+```
+
+Symfony expose uniquement une API JSON. Next.js assure le rendu côté client.
 
 ## HTTPS et domaine
 
@@ -132,31 +139,34 @@ obtient et renouvelle le certificat Let's Encrypt sans configuration supplément
 ## Gestion des ports
 
 Le générateur lit les `.env` de tous les projets existants dans le répertoire
-courant et alloue automatiquement le prochain bloc de 8 ports libres à partir
+courant et alloue automatiquement le prochain bloc de **10 ports** libres à partir
 de `:8080`. Deux projets ne se marcheront jamais dessus.
 
 ```
 PORT_BASE + 0  →  backend HTTPS (FrankenPHP)
-PORT_BASE + 1  →  frontend (Next.js)
+PORT_BASE + 1  →  frontend (Next.js) — réservé même sans --spa
 PORT_BASE + 2  →  pgAdmin
 PORT_BASE + 3  →  RabbitMQ UI
-PORT_BASE + 4  →  Prometheus
-PORT_BASE + 5  →  Loki
-PORT_BASE + 6  →  Tempo
-PORT_BASE + 7  →  Grafana
+PORT_BASE + 4  →  Prometheus        — réservé même sans --with-obs
+PORT_BASE + 5  →  Loki              — réservé même sans --with-obs
+PORT_BASE + 6  →  Tempo             — réservé même sans --with-obs
+PORT_BASE + 7  →  Grafana           — réservé même sans --with-obs
+PORT_BASE + 8  →  Mailpit SMTP
+PORT_BASE + 9  →  Mailpit UI
 ```
 
 ## Premier lancement d'un projet
 
 ```bash
 cd <nom-du-projet>
-make bootstrap   # initialise Symfony (+ Next.js si applicable), démarre tout
+make bootstrap   # initialise Symfony (+ Next.js si --spa), démarre tout
 make help        # liste toutes les commandes disponibles
 ```
 
 ## Observabilité
 
-Grafana est accessible sur le port alloué avec un dashboard **Overview** préchargé :
-métriques HTTP FrankenPHP/Caddy, files RabbitMQ, logs Loki, service map Tempo.
-Les logs, métriques et traces sont corrélés entre eux (clic sur un `trace_id`
-dans les logs → trace Tempo, et inversement).
+Activée avec `--with-obs`. Grafana est accessible sur le port alloué avec un
+dashboard **Overview** préchargé : métriques HTTP FrankenPHP/Caddy, files
+RabbitMQ, logs Loki, service map Tempo. Les logs, métriques et traces sont
+corrélés entre eux (clic sur un `trace_id` dans les logs → trace Tempo, et
+inversement).
