@@ -15,19 +15,29 @@ RUN apk add --no-cache \
         curl \
         git \
         unzip \
+        postgresql-dev \
+        icu-dev \
+        libzip-dev \
+        libxml2-dev \
+        oniguruma-dev \
+        rabbitmq-c-dev \
+        openssl-dev \
         acl
-
-# Extensions PHP
-RUN install-php-extensions \
-        pdo_pgsql \
+RUN docker-php-ext-install \
         intl \
+        pdo_pgsql \
         zip \
         opcache \
         xml \
-        mbstring \
+        mbstring
+
+# Extensions PHP
+RUN install-php-extensions \
         apcu \
         amqp \
         opentelemetry
+
+RUN docker-php-ext-enable amqp
 
 # Composer depuis image officielle
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

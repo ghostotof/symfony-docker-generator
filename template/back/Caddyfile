@@ -1,21 +1,20 @@
 # ═══════════════════════════════════════════════════════════
 #  Caddyfile — FrankenPHP
 #  FrankenPHP embarque Caddy : pas besoin de Nginx séparé.
-#  Les variables {env.*} sont résolues depuis les vars d'env.
+#
+#  Port unique : BACK_PORT (défaut : 8080) → HTTPS uniquement.
+#  Après la première visite, le header HSTS force le navigateur
+#  à toujours utiliser https:// automatiquement.
 # ═══════════════════════════════════════════════════════════
 
 {
-    # Port admin Caddy (métriques Prometheus exposées ici)
     admin 0.0.0.0:2019
 
-    # Activer les métriques Prometheus pour Caddy
     servers {
         metrics
     }
 
-    # FrankenPHP global
     frankenphp {
-        # Nombre de workers PHP (mode worker = pas de bootstrap à chaque requête)
         worker {
             file   /var/www/app/public/index.php
             num    4
@@ -24,30 +23,28 @@
     }
 }
 
-# ── Serveur principal ────────────────────────────────────
-:{$SERVER_NAME:8080} {
+# ── Serveur HTTPS ────────────────────────────────────────
+# Dev   : SERVER_NAME=localhost:8080  → certificat local CA Caddy
+# Prod  : SERVER_NAME=example.com     → certificat Let's Encrypt, port 443 standard
+https://{$SERVER_NAME:localhost:8080} {
 
-    # Racine publique Symfony
     root * /var/www/app/public
 
-    # Encode gzip/zstd
     encode zstd br gzip
 
-    # PHP via FrankenPHP
     php_server {
-        # Résolution correcte des chemins Symfony
         try_files {path} /index.php
     }
 
-    # Headers de sécurité
     header {
-        X-Content-Type-Options  nosniff
-        X-Frame-Options         SAMEORIGIN
-        Referrer-Policy         strict-origin-when-cross-origin
+        # HSTS : le navigateur bascule automatiquement en https:// après la 1ère visite
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    nosniff
+        X-Frame-Options           SAMEORIGIN
+        Referrer-Policy           strict-origin-when-cross-origin
         -Server
     }
 
-    # Logs structurés JSON → capturés par Promtail
     log {
         output stdout
         format json

@@ -242,10 +242,10 @@ printf "  %-28s %s\n" "Init Git :"              "$([ "$GIT_INIT" == true ]   && 
 echo ""
 printf "  ${C}%-28s${NC}" "Ports alloués :"
 if [[ "$WITH_FRONT" == true ]]; then
-    printf "  back:%-5s  front:%-5s  pgadmin:%-5s  rabbitmq:%-5s\n" \
+    printf "  back(https):%-5s  front:%-5s  pgadmin:%-5s  rabbitmq:%-5s\n" \
         "$P_BACK" "$P_FRONT" "$P_PGADMIN" "$P_RABBIT"
 else
-    printf "  back:%-5s  pgadmin:%-5s  rabbitmq:%-5s\n" \
+    printf "  back(https):%-5s  pgadmin:%-5s  rabbitmq:%-5s\n" \
         "$P_BACK" "$P_PGADMIN" "$P_RABBIT"
 fi
 if [[ "$WITH_OBS" == true ]]; then
@@ -443,6 +443,10 @@ PYEOF
 # ═══════════════════════════════════════════════════════════
 #  Caddyfile — FrankenPHP · Mode Symfony fullstack
 #  Symfony gère le HTML via Twig. Pas de proxy vers Next.js.
+#
+#  Port unique : BACK_PORT (défaut : 8080) → HTTPS uniquement.
+#  Après la première visite, le header HSTS force le navigateur
+#  à toujours utiliser https:// automatiquement.
 # ═══════════════════════════════════════════════════════════
 
 {
@@ -461,8 +465,10 @@ PYEOF
     }
 }
 
-# ── Serveur principal ────────────────────────────────────
-:{$SERVER_NAME:8080} {
+# ── Serveur HTTPS ────────────────────────────────────────
+# Dev   : SERVER_NAME=localhost:8080  → certificat local CA Caddy
+# Prod  : SERVER_NAME=example.com     → certificat Let's Encrypt, port 443 standard
+https://{$SERVER_NAME:localhost:8080} {
 
     root * /var/www/app/public
 
@@ -483,8 +489,10 @@ PYEOF
         try_files {path} /index.php
     }
 
-    # Headers de sécurité (plus stricts sans CORS inter-domaine)
+    # Headers de sécurité
     header {
+        # HSTS : le navigateur bascule automatiquement en https:// après la 1ère visite
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options      nosniff
         X-Frame-Options             SAMEORIGIN
         X-XSS-Protection            "1; mode=block"
@@ -603,13 +611,14 @@ FRONT_BLOCK="
 # ── Frontend Next.js ─────────────────────────────────────────────────────────
 NODE_VERSION=${NODE_VERSION}
 FRONT_PORT=${P_FRONT}
-NEXT_PUBLIC_API_URL=http://localhost:${P_BACK}/api
+NEXT_PUBLIC_API_URL=https://localhost:${P_BACK}/api
 NEXT_PUBLIC_APP_NAME=${PROJECT_PASCAL}"
 else
 FRONT_BLOCK="
 # ── Frontend : désactivé (mode Symfony fullstack / Twig) ─────────────────────
 # Le backend FrankenPHP sert directement les templates Twig.
-# Accès : http://localhost:${P_BACK}
+# Accès HTTPS : https://localhost:${P_BACK}
+# (après la 1ère visite, le navigateur bascule automatiquement via HSTS)
 # Pour activer Next.js : re-générer avec generate-docker-symfony sans --no-front"
 fi
 
@@ -655,7 +664,7 @@ POSTGRES_USER=${PROJECT_SLUG}_user
 POSTGRES_PASSWORD=${DB_PASSWORD}
 
 # ── pgAdmin ──────────────────────────────────────────────────────────────────
-PGADMIN_EMAIL=admin@${PROJECT_SLUG}.local
+PGADMIN_EMAIL=admin@${PROJECT_SLUG}.dev
 PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
 PGADMIN_PORT=${P_PGADMIN}
 
@@ -668,6 +677,8 @@ RABBITMQ_MANAGEMENT_PORT=${P_RABBIT}
 # ── FrankenPHP / Backend Symfony ─────────────────────────────────────────────
 FRANKENPHP_VERSION=${FRANKENPHP_VERSION}
 BACK_PORT=${P_BACK}
+# Dev : localhost:PORT  |  Prod : votre-domaine.com (Let's Encrypt auto, port 443)
+SERVER_NAME=localhost:${P_BACK}
 APP_SECRET=${APP_SECRET}
 ${CORS_LINE}
 JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
@@ -698,12 +709,13 @@ step "Génération du script bootstrap.sh"
 
 if [[ "$WITH_FRONT" == true ]]; then
     # ── Mode API + Next.js ────────────────────────────────────────────────────
-    # On part du squelette "api" officiel Symfony : pas de Twig, pas de WebProfiler,
-    # uniquement les composants HTTP kernel, routing, DI, console — pile API.
-    SYMFONY_CREATE_CMD="composer create-project symfony/skeleton /tmp/sf --no-interaction"
-    # Packages API minimal : pas de Twig, pas de WebProfiler
+    # `symfony new` = base minimale (kernel, routing, DI, console).
+    # Pas de Twig, pas de rendu HTML — Symfony expose uniquement une API JSON.
+    # La CLI Symfony est installée dans l'image FrankenPHP (voir Dockerfile).
+    SYMFONY_CREATE_CMD="symfony new /tmp/sf --no-git"
     SYMFONY_PACKAGES=(
         api-platform/core
+        symfony/security-bundle
         doctrine/doctrine-bundle
         doctrine/doctrine-migrations-bundle
         doctrine/orm
@@ -725,21 +737,20 @@ fi'
     FRONT_SUMMARY="echo \"  🌐 Frontend  (Next.js)  : http://localhost:\${FRONT_PORT}\""
 else
     # ── Mode Symfony fullstack (Twig) ─────────────────────────────────────────
-    # On part du même symfony/skeleton mais on ajoute les bundles web/assets.
-    SYMFONY_CREATE_CMD="composer create-project symfony/skeleton /tmp/sf --no-interaction"
-    # Packages fullstack Twig : rendu HTML côté serveur + assets
+    # `symfony new --webapp` installe le meta-package symfony/webapp qui inclut :
+    # twig-bundle, twig/extra-bundle, asset-mapper, security-bundle, form,
+    # validator, http-client, mailer, notifier, error-handler, string, yaml.
+    # C'est la commande officielle recommandée par Symfony pour une app web.
+    # La CLI Symfony est installée dans l'image FrankenPHP (voir Dockerfile).
+    # Note : symfony/webpack-encore-bundle est intentionnellement exclu — il
+    # nécessite Node.js, absent du container FrankenPHP. Utiliser asset-mapper.
+    SYMFONY_CREATE_CMD="symfony new /tmp/sf --webapp --no-git"
     SYMFONY_PACKAGES=(
-        symfony/twig-bundle
-        twig/extra-bundle
-        symfony/asset-mapper
-        symfony/webpack-encore-bundle
         doctrine/doctrine-bundle
         doctrine/doctrine-migrations-bundle
         doctrine/orm
         symfony/messenger
-        symfony/validator
         symfony/uid
-        lexik/jwt-authentication-bundle
         open-telemetry/sdk
         open-telemetry/exporter-otlp
         open-telemetry/opentelemetry-auto-symfony
@@ -747,25 +758,13 @@ else
 
     FRONT_INIT_BLOCK='# Mode Symfony fullstack — pas de container Next.js
 # Les templates Twig sont dans back/app/templates/
-# Les assets sont gérés par AssetMapper ou Webpack Encore (back/app/assets/)'
+# Les assets sont gérés par AssetMapper (back/app/assets/)'
     FRONT_SUMMARY="# Pas de frontend séparé — Symfony sert le HTML"
 fi
 
-# ── Sérialisation des packages pour le heredoc ───────────────────────────────
-# Convertit le tableau SYMFONY_PACKAGES en une chaîne multi-lignes avec \
-# pour que composer require soit lisible dans le bootstrap généré.
-# Construire la liste des packages : un par ligne avec continuation \
-# On utilise $'\n' (ANSI-C quoting) pour les vrais sauts de ligne
-SYMFONY_PKG_LINES=""
-last_idx=$(( ${#SYMFONY_PACKAGES[@]} - 1 ))
-for i in "${!SYMFONY_PACKAGES[@]}"; do
-    pkg="${SYMFONY_PACKAGES[$i]}"
-    if [[ $i -lt $last_idx ]]; then
-        SYMFONY_PKG_LINES+="        ${pkg} \\"$'\n'
-    else
-        SYMFONY_PKG_LINES+="        ${pkg}"
-    fi
-done
+# ── Sérialisation des packages ───────────────────────────────────────────────
+# Version inline (espace) pour le bloc -c "..." du docker compose run unique
+SYMFONY_PKG_INLINE="${SYMFONY_PACKAGES[*]}"
 
 # Bloc observabilité dans le résumé final
 if [[ "$WITH_OBS" == true ]]; then
@@ -777,6 +776,7 @@ else
 OBS_SUMMARY='# Observabilité désactivée'
 fi
 
+mkdir -p "${DEST_DIR}/scripts"
 cat > "${DEST_DIR}/scripts/bootstrap.sh" << BOOTSTRAP_EOF
 #!/usr/bin/env bash
 # Mode frontend : $([ "$WITH_FRONT" == true ] && echo "Next.js (SPA/SSR)" || echo "Symfony fullstack (Twig)")
@@ -813,13 +813,15 @@ sleep 10
 
 step "Initialisation Symfony (mode : $([ "$WITH_FRONT" == true ] && echo "API minimal" || echo "fullstack Twig"))"
 if [ ! -f back/app/composer.json ]; then
-    docker compose run --rm back \\
+    # Tout dans un seul container pour que /tmp/sf reste accessible entre les étapes
+    docker compose run --rm --entrypoint bash back -c "
+        set -e
         ${SYMFONY_CREATE_CMD}
-    docker compose run --rm --entrypoint bash back -c \\
-        "cp -r /tmp/sf/. /var/www/app/ && rm -rf /tmp/sf"
-    docker compose run --rm back composer require \\
-        ${SYMFONY_PKG_LINES} \\
-        --no-interaction
+        cp -r /tmp/sf/. /var/www/app/
+        rm -rf /tmp/sf
+        cd /var/www/app
+        composer require ${SYMFONY_PKG_INLINE} --no-interaction
+    "
 fi
 
 ${FRONT_INIT_BLOCK}
@@ -829,7 +831,7 @@ docker compose up -d
 
 step "Stack prête !"
 echo ""
-echo "  🔧 Backend (FrankenPHP) : http://localhost:\${BACK_PORT}"
+echo "  🔧 Backend (FrankenPHP) : https://localhost:\${BACK_PORT}"
 ${FRONT_SUMMARY}
 echo "  🗄️  pgAdmin              : http://localhost:\${PGADMIN_PORT}"
 echo "  🐇 RabbitMQ UI          : http://localhost:\${RABBITMQ_MANAGEMENT_PORT}"
@@ -846,10 +848,10 @@ success "bootstrap.sh généré"
 step "Génération du README"
 
 if [[ "$WITH_FRONT" == true ]]; then
-    FRONT_TABLE_ROW="| Frontend     | http://localhost:${P_FRONT}                     |"
+    FRONT_TABLE_ROW="| Frontend     | http://localhost:${P_FRONT}                      |"
     STACK_DESC="FrankenPHP · Next.js · PostgreSQL · RabbitMQ"
 else
-    FRONT_TABLE_ROW="| Frontend     | intégré au backend (Twig) — http://localhost:${P_BACK} |"
+    FRONT_TABLE_ROW="| Frontend     | intégré au backend (Twig) — https://localhost:${P_BACK} |"
     STACK_DESC="FrankenPHP · Symfony fullstack (Twig) · PostgreSQL · RabbitMQ"
 fi
 [[ "$WITH_OBS" == true ]] && STACK_DESC="${STACK_DESC} · LGTM"
@@ -876,7 +878,7 @@ les templates et les assets depuis \`back/app/\`.
 
 **Pour créer une page :** ajouter un Controller + un template dans \`back/app/templates/\`.
 **Pour les assets :** utiliser [AssetMapper](https://symfony.com/doc/current/frontend/asset_mapper.html)
-ou [Webpack Encore](https://symfony.com/doc/current/frontend/encore/index.html).
+(installé par défaut — standard Symfony 7+, sans Node.js requis).
 NOFRONT
 )
 
@@ -891,7 +893,7 @@ make bootstrap
 
 | Service      | URL locale                              |
 |--------------|-----------------------------------------|
-| Backend      | http://localhost:${P_BACK}                      |
+| Backend      | https://localhost:${P_BACK}                     |
 ${FRONT_TABLE_ROW}
 | pgAdmin      | http://localhost:${P_PGADMIN}                   |
 | RabbitMQ UI  | http://localhost:${P_RABBIT}                    |
@@ -939,7 +941,7 @@ echo -e "  ${W}Répertoire${NC}    ${DEST_DIR}"
 echo -e "  ${W}Mode frontend${NC} $([ "$WITH_FRONT" == true ] && echo 'Next.js (SPA/SSR)' || echo 'Symfony fullstack (Twig)')"
 echo ""
 echo -e "  ${W}Ports alloués${NC}"
-printf "    %-24s :%-5s\n" "Backend (FrankenPHP)" "${P_BACK}"
+printf "    %-24s :%-5s  (https://localhost:%s)\n" "Backend HTTPS" "${P_BACK}" "${P_BACK}"
 if [[ "$WITH_FRONT" == true ]]; then
     printf "    %-24s :%-5s\n" "Frontend (Next.js)" "${P_FRONT}"
 fi

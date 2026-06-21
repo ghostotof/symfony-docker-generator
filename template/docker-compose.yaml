@@ -98,7 +98,7 @@ services:
     environment:
       APP_ENV:                  ${APP_ENV}
       APP_SECRET:               ${APP_SECRET}
-      SERVER_NAME:              ":${BACK_PORT}"
+      SERVER_NAME:              ${SERVER_NAME}
       DATABASE_URL:             postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8
       MESSENGER_TRANSPORT_DSN:  amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/${RABBITMQ_VHOST}
       CORS_ALLOW_ORIGIN:        ${CORS_ALLOW_ORIGIN}
@@ -114,7 +114,8 @@ services:
       - back_vendor:/var/www/app/vendor
       - ./back/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
-      - "${BACK_PORT}:${BACK_PORT}"
+      - "${BACK_PORT}:${BACK_PORT}"       # HTTPS (port unique)
+      - "${BACK_PORT}:${BACK_PORT}/udp"   # HTTP/3 (QUIC)
     networks:
       - backend
       - frontend

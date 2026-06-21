@@ -4,8 +4,8 @@ set -e
 echo "==> [FrankenPHP] Démarrage en mode DEV"
 cd /var/www/app
 
-# Dépendances Composer
-if [ ! -d "vendor" ]; then
+# Dépendances Composer (seulement si le projet est initialisé)
+if [ ! -d "vendor" ] && [ -f "composer.json" ]; then
     echo "==> vendor/ absent — composer install..."
     composer install --no-interaction --prefer-dist
 fi
