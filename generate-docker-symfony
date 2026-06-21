@@ -355,6 +355,7 @@ for f in "${FILES_TO_PATCH[@]}"; do
     replace_in_file "$f" "myapp-overview"         "${PROJECT_SLUG}-overview"
     replace_in_file "$f" "myapp-back"             "${PROJECT_SLUG}-back"
     replace_in_file "$f" "myapp_queue"            "${PROJECT_SLUG}_queue"
+    replace_in_file "$f" "myapp_user"             "${PROJECT_SLUG}_user"
     replace_in_file "$f" "myapp\.rules"           "${PROJECT_SLUG}.rules"
     replace_in_file "$f" "name: myapp$"           "name: ${PROJECT_SLUG}"
     replace_in_file "$f" "MAIL_MYAPP_"            "MAIL_${PROJECT_UPPER}_"
