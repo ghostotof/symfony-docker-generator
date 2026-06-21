@@ -19,7 +19,7 @@ services:
       POSTGRES_USER:     ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - ./db/data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - backend
@@ -67,7 +67,7 @@ services:
       RABBITMQ_DEFAULT_PASS:  ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     ports:
@@ -283,8 +283,6 @@ services:
 
 # ─── Volumes ────────────────────────────────────────────
 volumes:
-  db_data:
-  rabbitmq_data:
   back_vendor:
   front_node_modules:
   front_next:
