@@ -243,7 +243,7 @@ printf "  %-28s %s\n" "Node.js :"               "${NODE_VERSION}"
 fi
 printf "  %-28s %s\n" "Environnement initial :" "${APP_ENV}"
 printf "  %-28s %s\n" "Mode frontend :"         "$([ "$WITH_FRONT" == true ] && echo 'Next.js (SPA/SSR)' || echo 'Symfony fullstack (Twig)')"
-printf "  %-28s %s\n" "Stack observabilité :"   "$([ "$WITH_OBS" == true ]   && echo 'oui' || echo 'non')"
+printf "  %-29s %s\n" "Stack observabilité :"   "$([ "$WITH_OBS" == true ]   && echo 'oui' || echo 'non')"
 printf "  %-28s %s\n" "Init Git :"              "$([ "$GIT_INIT" == true ]   && echo 'oui' || echo 'non')"
 echo ""
 printf "  ${C}%-28s${NC}" "Ports alloués :"
