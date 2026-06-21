@@ -236,7 +236,7 @@ GRAFANA_PASSWORD=$(gen_secret | head -c 24)
 title "Nouveau projet : ${PROJECT_PASCAL}"
 echo ""
 printf "  %-28s %s\n" "Nom du projet :"         "${PROJECT_SLUG}"
-printf "  %-28s %s\n" "Répertoire :"            "${DEST_DIR}"
+printf "  %-29s %s\n" "Répertoire :"            "${DEST_DIR}"
 printf "  %-28s %s\n" "PHP / FrankenPHP :"      "${PHP_VERSION} / ${FRANKENPHP_VERSION}"
 if [[ "$WITH_FRONT" == true ]]; then
 printf "  %-28s %s\n" "Node.js :"               "${NODE_VERSION}"
