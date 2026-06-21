@@ -8,7 +8,7 @@
 #  Exemples :
 #    bash generate-docker-symfony monprojet
 #    bash generate-docker-symfony monprojet --port-base 8100
-#    bash generate-docker-symfony monprojet --php 8.4 --node 22 --no-obs
+#    bash generate-docker-symfony monprojet --php 8.4 --node 22 --with-obs
 #    bash generate-docker-symfony monprojet --no-front   ← Symfony fullstack (Twig)
 #    bash generate-docker-symfony monprojet --port-base 8200 --dry-run
 #
@@ -50,7 +50,7 @@ PHP_VERSION="8.4"
 NODE_VERSION="22"
 FRANKENPHP_VERSION="1"
 APP_ENV="dev"
-WITH_OBS=true         # inclure Prometheus/Loki/Tempo/Grafana
+WITH_OBS=false        # inclure Prometheus/Loki/Tempo/Grafana (opt-in via --with-obs)
 WITH_FRONT=true       # inclure le service Next.js
                       # false → Symfony sert le HTML via Twig (mode fullstack)
 DRY_RUN=false
@@ -78,7 +78,7 @@ ${W}Options :${NC}
   ${C}--node VERSION${NC}        Version Node.js (défaut: ${NODE_VERSION})
   ${C}--frankenphp VERSION${NC}  Version FrankenPHP (défaut: ${FRANKENPHP_VERSION})
   ${C}--env ENV${NC}             Environnement initial dev|prod (défaut: ${APP_ENV})
-  ${C}--no-obs${NC}              Exclure Prometheus / Loki / Tempo / Grafana
+  ${C}--with-obs${NC}            Inclure Prometheus / Loki / Tempo / Grafana
   ${C}--no-front${NC}            Exclure Next.js — Symfony gère le HTML (Twig/fullstack)
                         Incompatible avec --node
   ${C}--no-git${NC}              Ne pas initialiser de dépôt Git
@@ -97,7 +97,7 @@ ${W}Modes frontend :${NC}
 ${W}Exemples :${NC}
   generate-docker-symfony monprojet
   generate-docker-symfony monprojet --port-base 8100
-  generate-docker-symfony monprojet --php 8.4 --no-obs --no-front
+  generate-docker-symfony monprojet --php 8.4 --with-obs --no-front
   generate-docker-symfony monprojet --dry-run
 
 ${W}Structure produite :${NC}
@@ -124,7 +124,7 @@ while [[ $# -gt 0 ]]; do
         --node)         NODE_VERSION="$2"; shift 2 ;;
         --frankenphp)   FRANKENPHP_VERSION="$2"; shift 2 ;;
         --env)          APP_ENV="$2"; shift 2 ;;
-        --no-obs)       WITH_OBS=false; shift ;;
+        --with-obs)     WITH_OBS=true; shift ;;
         --no-front)     WITH_FRONT=false; shift ;;
         --no-git)       GIT_INIT=false; shift ;;
         --force)        FORCE=true; shift ;;
@@ -295,7 +295,7 @@ else
     info "Répertoire front/ supprimé (mode Symfony fullstack)"
 fi
 
-# ─── Suppression de l'observabilité si --no-obs ───────────────────────────────
+# ─── Suppression de l'observabilité (par défaut, sauf --with-obs) ────────────
 if [[ "$WITH_OBS" == false ]]; then
     step "Suppression de la stack d'observabilité"
     rm -rf "${DEST_DIR}/observability"
@@ -564,7 +564,7 @@ PYEOF
 fi  # fin du bloc --no-front
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  SUPPRESSION OBS DU docker-compose si --no-obs
+#  SUPPRESSION OBS DU docker-compose (par défaut, sauf --with-obs)
 # ═══════════════════════════════════════════════════════════════════════════════
 if [[ "$WITH_OBS" == false ]]; then
     step "Retrait de l'observabilité du docker-compose"
