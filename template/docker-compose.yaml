@@ -242,8 +242,8 @@ services:
       - tempo_data:/var/tempo
     ports:
       - "${TEMPO_PORT}:3200"       # UI / query
-      - "4317:4317"                # OTLP gRPC
-      - "4318:4318"                # OTLP HTTP
+      # Les ports OTLP (4317/4318) ne sont pas exposés sur l'hôte :
+      # le container back communique avec tempo via le réseau Docker interne.
     networks:
       - observability
       - backend
