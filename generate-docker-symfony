@@ -158,7 +158,7 @@ if [[ "$NODE_EXPLICIT" == true ]] && [[ "$WITH_FRONT" == false ]]; then
     die "--node nécessite --spa (pas de container Node en mode fullstack)"
 fi
 
-PROJECT_SLUG="$(echo "${PROJECT_NAME}" | tr '[:upper:]' '[:lower:]')"
+PROJECT_SLUG="$(echo "${PROJECT_NAME}" | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]')"
 PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g' | sed -E 's/^[a-z]/\u&/')"
 PROJECT_UPPER="$(echo "${PROJECT_SLUG}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
 
