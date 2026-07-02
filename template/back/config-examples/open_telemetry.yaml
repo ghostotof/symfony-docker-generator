@@ -1,0 +1,22 @@
+# config/packages/open_telemetry.yaml
+# Nécessite : composer require open-telemetry/opentelemetry-auto-symfony
+#
+# Le SDK OpenTelemetry PHP est configuré via variables d'environnement
+# (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME) définies dans docker-compose.yaml.
+#
+# Pour activer le tracing automatique Symfony (requêtes HTTP, Doctrine, Messenger) :
+#   composer require \
+#       open-telemetry/sdk \
+#       open-telemetry/exporter-otlp \
+#       open-telemetry/opentelemetry-auto-symfony \
+#       open-telemetry/opentelemetry-auto-doctrine \
+#       open-telemetry/opentelemetry-auto-psr18
+#
+# Aucune configuration YAML supplémentaire n'est nécessaire :
+# l'auto-instrumentation se fait via l'extension PHP opentelemetry chargée dans php.ini.
+#
+# Variables d'environnement utiles (déjà dans .env / docker-compose) :
+#   OTEL_EXPORTER_OTLP_ENDPOINT = http://tempo:4318
+#   OTEL_SERVICE_NAME           = myapp-back
+#   OTEL_TRACES_SAMPLER         = parentbased_always_on
+#   OTEL_PROPAGATORS            = tracecontext,baggage

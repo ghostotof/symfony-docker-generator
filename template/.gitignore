@@ -1,0 +1,13 @@
+.env
+.env.local
+back/app/vendor/
+back/app/var/
+back/app/config/jwt/
+front/app/node_modules/
+front/app/.next/
+backups/
+*.sql
+*.dump
+.DS_Store
+Thumbs.db
+db/pgadmin/data/

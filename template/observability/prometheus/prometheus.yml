@@ -1,0 +1,52 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    env: "${APP_ENV:-dev}"
+
+# Règles d'alertes
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+
+  # ── Prometheus lui-même ──────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  # ── FrankenPHP / Caddy (métriques Caddy + PHP) ───────
+  - job_name: frankenphp
+    static_configs:
+      - targets: [back:2019]
+    metrics_path: /metrics
+
+  # ── PostgreSQL (via postgres_exporter) ───────────────
+  # Décommentez si vous ajoutez le service postgres_exporter
+  # - job_name: postgres
+  #   static_configs:
+  #     - targets: [postgres_exporter:9187]
+
+  # ── RabbitMQ (plugin rabbitmq_prometheus) ────────────
+  - job_name: rabbitmq
+    static_configs:
+      - targets: [rabbitmq:15692]
+    metrics_path: /metrics
+
+  # ── Node.js / Next.js (si vous ajoutez prom-client) ──
+  # - job_name: nextjs
+  #   static_configs:
+  #     - targets: [front:3000]
+  #   metrics_path: /api/metrics
+
+  # ── Loki ─────────────────────────────────────────────
+  - job_name: loki
+    static_configs:
+      - targets: [loki:3100]
+    metrics_path: /metrics
+
+  # ── Tempo ─────────────────────────────────────────────
+  - job_name: tempo
+    static_configs:
+      - targets: [tempo:3200]
+    metrics_path: /metrics
