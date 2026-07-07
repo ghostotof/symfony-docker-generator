@@ -589,11 +589,10 @@ import sys, re
 path = sys.argv[1]
 with open(path) as f:
     content = f.read()
-for svc in ['prometheus', 'loki', 'promtail', 'tempo', 'grafana']:
-    content = re.sub(
-        rf'\n  # [─═]+ {svc.capitalize()}.*?(?=\n  # [─═]|\n  [a-z]|\nvol|\nnet|$)',
-        '', content, flags=re.DOTALL | re.IGNORECASE)
-    content = re.sub(rf'\n  {svc}:\n(?:    [^\n]*\n)*', '\n', content)
+# Bloc titré "OBSERVABILITÉ" (bannières + services prometheus/loki/promtail/tempo/grafana)
+content = re.sub(
+    r'\n  # ═+\n  #\s*OBSERVABILITÉ\s*\n  # ═+\n.*?(?=\n# ─── Volumes)',
+    '\n', content, flags=re.DOTALL)
 for vol in ['prometheus_data', 'loki_data', 'tempo_data', 'grafana_data']:
     content = re.sub(rf'\n  {vol}:\n', '\n', content)
 content = re.sub(r'\n  observability:\n    driver: bridge\n', '\n', content)
@@ -605,11 +604,34 @@ content = re.sub(
     '\n',
     content
 )
+# Labels de découverte Promtail : plus de Promtail sans --with-obs
+content = re.sub(
+    r'\n    labels:\n      logging: "promtail"\n      logging_jobname: "[^"\n]*"\n',
+    '\n', content)
+# Mention "Observabilité" dans l'en-tête du fichier
+content = re.sub(r'\n#\s*\+ Observabilité[^\n]*\n', '\n', content)
 with open(path, 'w') as f:
     f.write(content)
 print("  docker-compose.yaml allégé (obs supprimé)")
 PYEOF
     success "docker-compose.yaml mis à jour"
+
+    step "Retrait de l'observabilité du docker-compose.prod.yml"
+    python3 - "${DEST_DIR}/docker-compose.prod.yml" << 'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+for svc in ['prometheus', 'tempo']:
+    content = re.sub(rf'\n  {svc}:\n(?:    [^\n]*\n)*', '\n', content)
+content = re.sub(
+    r'\n      OTEL_TRACES_SAMPLER: parentbased_traceidratio\n      OTEL_TRACES_SAMPLER_ARG:[^\n]*\n',
+    '\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+print("  docker-compose.prod.yml allégé (obs supprimé)")
+PYEOF
+    success "docker-compose.prod.yml mis à jour"
 
     python3 - "${DEST_DIR}/Makefile" << 'PYEOF'
 import sys, re
@@ -626,6 +648,54 @@ PYEOF
 
     rm -f "${DEST_DIR}/back/config-examples/open_telemetry.yaml"
     success "config-examples/open_telemetry.yaml supprimé"
+
+    step "Retrait du plugin Prometheus de RabbitMQ"
+    sed -i 's/\[rabbitmq_management,rabbitmq_prometheus\]\./[rabbitmq_management]./' \
+        "${DEST_DIR}/rabbitmq/enabled_plugins"
+    sed -i '/# Activer le plugin Prometheus/d;/^prometheus\.return_per_object_metrics/d' \
+        "${DEST_DIR}/rabbitmq/rabbitmq.conf"
+    success "rabbitmq/enabled_plugins et rabbitmq.conf allégés"
+
+    step "Retrait d'OpenTelemetry du backend PHP"
+    # Retire la ligne "opentelemetry" ET le "\" de continuation de la ligne
+    # précédente (sinon le RUN install-php-extensions fusionne avec le RUN suivant)
+    python3 - "${DEST_DIR}/back/Dockerfile" << 'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+content = re.sub(r' \\\n\s*opentelemetry\n', '\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+    sed -i '/; OpenTelemetry — auto-instrumentation/d;/^; L.extension opentelemetry est chargée/d;/^opentelemetry\.allow_hook_all/d' \
+        "${DEST_DIR}/back/docker/php/php-dev.ini"
+    sed -i '/^opentelemetry\.allow_hook_all/d' \
+        "${DEST_DIR}/back/docker/php/php-prod.ini"
+    success "Extension opentelemetry retirée du Dockerfile et des .ini"
+
+    step "Retrait des métriques Prometheus du Caddyfile"
+    python3 - "${DEST_DIR}/back/Caddyfile" << 'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+# Admin API (uniquement utile pour exposer /metrics à Prometheus) + activation des métriques serveur
+content = content.replace(
+    "    admin 0.0.0.0:2019\n\n    servers {\n        metrics\n    }\n\n    frankenphp {",
+    "    frankenphp {")
+# Le log stdout reste utile (docker compose logs) même sans Promtail pour l'agréger
+content = content.replace(
+    "    # Logs structurés JSON → capturés par Promtail\n",
+    "    # Logs structurés JSON\n")
+# Site dédié à l'exposition des métriques Caddy pour Prometheus
+content = re.sub(
+    r'\n# ── Métriques Caddy exposées pour Prometheus.*?\n:2019 \{\n    metrics /metrics\n\}\n?',
+    '\n', content, flags=re.DOTALL)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+    success "Caddyfile allégé (admin API, métriques et commentaires Prometheus/Promtail retirés)"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
