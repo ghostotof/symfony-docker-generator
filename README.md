@@ -28,8 +28,11 @@ Le projet est créé dans le **répertoire courant** au moment du lancement du s
 # Projet Symfony fullstack Twig (défaut)
 bash generate-docker-symfony monprojet
 
-# Symfony API JSON + Next.js (SPA/SSR)
+# Symfony API JSON + Next.js/React (SPA/SSR) — défaut avec --spa
 bash generate-docker-symfony monprojet --spa
+
+# Symfony API JSON + Vue.js (Vite)
+bash generate-docker-symfony monprojet --spa vue
 
 # Avec observabilité (Prometheus / Loki / Tempo / Grafana)
 bash generate-docker-symfony monprojet --with-obs
@@ -38,7 +41,7 @@ bash generate-docker-symfony monprojet --with-obs
 bash generate-docker-symfony monprojet --spa --with-obs
 
 # Épingler Node.js (uniquement avec --spa)
-bash generate-docker-symfony monprojet --spa --node 20
+bash generate-docker-symfony monprojet --spa react --node 20
 
 # Épingler une version FrankenPHP précise
 bash generate-docker-symfony monprojet --frankenphp 1.4
@@ -56,10 +59,10 @@ bash generate-docker-symfony monprojet --dry-run
 |-----------------------|--------------------------------------------------------------------|
 | `--port-base N`       | Premier port du bloc alloué (défaut : auto-détection)             |
 | `--php VERSION`       | Version PHP dans FrankenPHP (défaut : `8.4`)                      |
-| `--node VERSION`      | Version Node.js pour Next.js, défaut : `22` — requiert `--spa`    |
+| `--node VERSION`      | Version Node.js pour le frontend, défaut : `22` — requiert `--spa` |
 | `--frankenphp VER`    | Version FrankenPHP (défaut : `1`, dernier 1.x stable)             |
 | `--env ENV`           | Environnement initial `dev` ou `prod` (défaut : `dev`)            |
-| `--spa`               | Ajoute Next.js — Symfony expose une API JSON, Next.js gère le HTML |
+| `--spa [react\|vue]`  | Ajoute un frontend séparé — Symfony expose une API JSON. Argument optionnel (défaut `react`) : `react` = Next.js/React, `vue` = Vue.js (Vite) |
 | `--with-obs`          | Ajoute Prometheus / Loki / Tempo / Grafana                        |
 | `--no-git`            | Ne pas initialiser de dépôt Git dans le projet généré             |
 | `--force`             | Écraser le répertoire de destination s'il existe déjà             |
@@ -82,12 +85,12 @@ bash generate-docker-symfony monprojet --dry-run
     │   ├── Caddyfile
     │   └── Dockerfile      ← multi-stage dev/prod
     ├── front/              ← présent uniquement avec --spa
-    │   └── app/            ← code Next.js (vide, initialisé par bootstrap)
+    │   └── app/            ← code Next.js ou Vue.js (vide, initialisé par bootstrap)
     ├── db/
     ├── rabbitmq/
     ├── observability/      ← présent uniquement avec --with-obs
     └── scripts/
-        └── bootstrap.sh    ← initialise Symfony + Next.js au premier lancement
+        └── bootstrap.sh    ← initialise Symfony + le frontend au premier lancement
 ```
 
 ## Modes Symfony
@@ -107,7 +110,7 @@ renforcés, pas de CORS inter-domaine.
 `symfony/webpack-encore-bundle` est intentionnellement exclu (nécessite Node.js,
 absent du container FrankenPHP — utiliser AssetMapper à la place).
 
-### Mode API + Next.js *(`--spa`)*
+### Mode API + frontend séparé *(`--spa` / `--spa react` / `--spa vue`)*
 
 Utilise `symfony new` (skeleton minimal) puis installe :
 
@@ -118,7 +121,19 @@ nelmio/cors-bundle · lexik/jwt-authentication-bundle
 opentelemetry
 ```
 
-Symfony expose uniquement une API JSON. Next.js assure le rendu côté client.
+Symfony expose uniquement une API JSON. Le rendu côté client est assuré par
+le frontend choisi :
+
+- **`--spa` ou `--spa react`** *(défaut)* — Next.js/React/TypeScript, scaffoldé
+  via `create-next-app@latest`. Variables client exposées avec le préfixe
+  `NEXT_PUBLIC_*`.
+- **`--spa vue`** — Vue.js (Vite)/TypeScript, scaffoldé via `create-vue@latest`.
+  Variables client exposées avec le préfixe `VITE_*`. En dev, le serveur Vite
+  tourne dans le container ; en prod, le build statique (`dist/`) est servi
+  par `serve`.
+
+Dans les deux cas, `--node VERSION` permet d'épingler la version de Node.js
+du container frontend (défaut : `22`).
 
 ## HTTPS et domaine
 
@@ -144,7 +159,7 @@ de `:8080`. Deux projets ne se marcheront jamais dessus.
 
 ```
 PORT_BASE + 0  →  backend HTTPS (FrankenPHP)
-PORT_BASE + 1  →  frontend (Next.js) — réservé même sans --spa
+PORT_BASE + 1  →  frontend (Next.js ou Vue.js) — réservé même sans --spa
 PORT_BASE + 2  →  pgAdmin
 PORT_BASE + 3  →  RabbitMQ UI
 PORT_BASE + 4  →  Prometheus        — réservé même sans --with-obs
@@ -159,7 +174,7 @@ PORT_BASE + 9  →  Mailpit UI
 
 ```bash
 cd <nom-du-projet>
-make init        # initialise Symfony (+ Next.js si --spa), démarre tout
+make init        # initialise Symfony (+ frontend si --spa), démarre tout
 make help        # liste toutes les commandes disponibles
 ```
 
