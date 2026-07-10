@@ -51,8 +51,9 @@ NODE_VERSION="22"
 FRANKENPHP_VERSION="1"
 APP_ENV="dev"
 WITH_OBS=false        # inclure Prometheus/Loki/Tempo/Grafana (opt-in via --with-obs)
-WITH_FRONT=false      # inclure Next.js séparé (opt-in via --spa)
+WITH_FRONT=false      # inclure un frontend séparé (opt-in via --spa)
                       # false → Symfony sert le HTML via Twig (mode fullstack, défaut)
+FRONT_FRAMEWORK="react" # react (défaut, Next.js) | vue (Vue.js) — argument optionnel de --spa
 NODE_EXPLICIT=false   # true si --node est explicitement passé
 DRY_RUN=false
 GIT_INIT=true
@@ -77,12 +78,15 @@ ${W}Arguments :${NC}
 ${W}Options :${NC}
   ${C}--port-base N${NC}         Premier port du bloc (défaut: auto, bloc de ${PORT_SLOTS} ports)
   ${C}--php VERSION${NC}         Version PHP FrankenPHP (défaut: ${PHP_VERSION})
-  ${C}--node VERSION${NC}        Version Node.js pour le container Next.js (défaut: ${NODE_VERSION})
+  ${C}--node VERSION${NC}        Version Node.js pour le container frontend (défaut: ${NODE_VERSION})
                         Uniquement valide avec --spa
   ${C}--frankenphp VERSION${NC}  Version FrankenPHP (défaut: ${FRANKENPHP_VERSION})
   ${C}--env ENV${NC}             Environnement initial dev|prod (défaut: ${APP_ENV})
   ${C}--with-obs${NC}            Inclure Prometheus / Loki / Tempo / Grafana
-  ${C}--spa${NC}                 Inclure Next.js — Symfony expose une API JSON, Next.js gère le HTML
+  ${C}--spa [react|vue]${NC}     Inclure un frontend séparé — Symfony expose une API JSON
+                        Argument optionnel (défaut : react) :
+                          ${C}react${NC}  Next.js / React / TypeScript
+                          ${C}vue${NC}    Vue.js (Vite) / TypeScript
                         Node.js ${NODE_VERSION} par défaut (surcharger avec --node VERSION)
   ${C}--no-git${NC}              Ne pas initialiser de dépôt Git
   ${C}--force${NC}               Écraser le répertoire de destination s'il existe
@@ -90,13 +94,19 @@ ${W}Options :${NC}
   ${C}-h, --help${NC}            Afficher cette aide
 
 ${W}Modes frontend :${NC}
-  ${C}(défaut)${NC}              Symfony = fullstack Twig  (pas de container Next.js)
+  ${C}(défaut)${NC}              Symfony = fullstack Twig  (pas de container Node)
                         → FrankenPHP sert les assets/templates Symfony
                         → Caddyfile adapté (asset caching, CORS retiré)
                         → symfony new --webapp (Twig, Form, AssetMapper inclus)
-  ${C}--spa${NC}                 Symfony = API JSON  +  Next.js = SPA/SSR React
+  ${C}--spa${NC} / ${C}--spa react${NC}  Symfony = API JSON  +  Next.js = SPA/SSR React
                         → Service front ajouté, symfony new minimal (sans --webapp)
                         → Paquets API : api-platform, lexik/jwt, nelmio/cors
+                        → Scaffolding : create-next-app@latest (TypeScript)
+                        → Node.js ${NODE_VERSION} par défaut (--node VERSION pour changer)
+  ${C}--spa vue${NC}             Symfony = API JSON  +  Vue.js (Vite) = SPA
+                        → Service front ajouté, symfony new minimal (sans --webapp)
+                        → Paquets API : api-platform, lexik/jwt, nelmio/cors
+                        → Scaffolding : create-vue@latest (TypeScript)
                         → Node.js ${NODE_VERSION} par défaut (--node VERSION pour changer)
 
 ${W}Exemples :${NC}
@@ -104,7 +114,8 @@ ${W}Exemples :${NC}
   generate-docker-symfony monprojet --port-base 8100
   generate-docker-symfony monprojet --php 8.4 --with-obs
   generate-docker-symfony monprojet --spa
-  generate-docker-symfony monprojet --spa --node 20
+  generate-docker-symfony monprojet --spa react --node 20
+  generate-docker-symfony monprojet --spa vue
   generate-docker-symfony monprojet --dry-run
 
 ${W}Structure produite :${NC}
@@ -114,7 +125,7 @@ ${W}Structure produite :${NC}
       ├── docker-compose.yaml
       ├── Makefile
       ├── back/app/        ← projet Symfony
-      ├── front/app/       ← projet Next.js (présent si --spa)
+      ├── front/app/       ← projet Next.js ou Vue.js (présent si --spa)
       └── ...
 
 EOF
@@ -132,7 +143,15 @@ while [[ $# -gt 0 ]]; do
         --frankenphp)   FRANKENPHP_VERSION="$2"; shift 2 ;;
         --env)          APP_ENV="$2"; shift 2 ;;
         --with-obs)     WITH_OBS=true; shift ;;
-        --spa) WITH_FRONT=true; shift ;;
+        --spa)
+            WITH_FRONT=true
+            if [[ "${2:-}" =~ ^(react|vue)$ ]]; then
+                FRONT_FRAMEWORK="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
         --no-git)       GIT_INIT=false; shift ;;
         --force)        FORCE=true; shift ;;
         --dry-run)      DRY_RUN=true; shift ;;
@@ -158,6 +177,17 @@ fi
 if [[ "$NODE_EXPLICIT" == true ]] && [[ "$WITH_FRONT" == false ]]; then
     die "--node nécessite --spa (pas de container Node en mode fullstack)"
 fi
+
+# ─── Libellé du mode frontend (fullstack Twig | Next.js/React | Vue.js) ──────
+frontend_label() {
+    if [[ "$WITH_FRONT" == false ]]; then
+        echo "Symfony fullstack (Twig)"
+    elif [[ "$FRONT_FRAMEWORK" == "vue" ]]; then
+        echo "Vue.js (SPA)"
+    else
+        echo "Next.js/React (SPA/SSR)"
+    fi
+}
 
 PROJECT_SLUG="$(echo "${PROJECT_NAME}" | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]')"
 PROJECT_PASCAL="$(echo "${PROJECT_NAME}" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g' | sed -E 's/^[a-z]/\u&/')"
@@ -245,7 +275,7 @@ if [[ "$WITH_FRONT" == true ]]; then
 printf "  %-28s %s\n" "Node.js :"               "${NODE_VERSION}"
 fi
 printf "  %-28s %s\n" "Environnement initial :" "${APP_ENV}"
-printf "  %-28s %s\n" "Mode frontend :"         "$([ "$WITH_FRONT" == true ] && echo 'Next.js (SPA/SSR)' || echo 'Symfony fullstack (Twig)')"
+printf "  %-28s %s\n" "Mode frontend :"         "$(frontend_label)"
 printf "  %-29s %s\n" "Stack observabilité :"   "$([ "$WITH_OBS" == true ]   && echo 'oui' || echo 'non')"
 printf "  %-28s %s\n" "Init Git :"              "$([ "$GIT_INIT" == true ]   && echo 'oui' || echo 'non')"
 echo ""
@@ -458,7 +488,7 @@ PYEOF
     cat > "${DEST_DIR}/back/Caddyfile" << 'CADDYEOF'
 # ═══════════════════════════════════════════════════════════
 #  Caddyfile — FrankenPHP · Mode Symfony fullstack
-#  Symfony gère le HTML via Twig. Pas de proxy vers Next.js.
+#  Symfony gère le HTML via Twig. Pas de proxy vers un frontend séparé.
 #
 #  Port unique : BACK_PORT (défaut : 8080) → HTTPS uniquement.
 #  Après la première visite, le header HSTS force le navigateur
@@ -578,6 +608,73 @@ PYEOF
     success "Makefile mis à jour (section Twig/Assets)"
 
 fi  # fin du bloc fullstack (sans --spa)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MODE --spa vue : ADAPTATIONS SPÉCIFIQUES (Vite au lieu de Next.js)
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "$WITH_FRONT" == true ]] && [[ "$FRONT_FRAMEWORK" == "vue" ]]; then
+    step "Mode Vue.js — adaptation du docker-compose.yaml"
+
+    # Vite n'expose au client que les variables préfixées VITE_ (équivalent de
+    # NEXT_PUBLIC_ côté Next.js), et ne possède pas de dossier de cache .next
+    # à monter en volume (le cache Vite vit dans node_modules/.vite).
+    python3 - "${DEST_DIR}/docker-compose.yaml" << 'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+
+content = content.replace(
+    "      NEXT_PUBLIC_API_URL:    ${NEXT_PUBLIC_API_URL}\n"
+    "      NEXT_PUBLIC_APP_NAME:   ${NEXT_PUBLIC_APP_NAME}\n",
+    "      VITE_API_URL:           ${VITE_API_URL}\n"
+    "      VITE_APP_NAME:          ${VITE_APP_NAME}\n"
+)
+
+# Retirer le volume de cache .next (spécifique Next.js)
+content = content.replace("      - front_next:/app/.next\n", "")
+content = re.sub(r"\n  front_next:\n", "\n", content)
+
+with open(path, 'w') as f:
+    f.write(content)
+print("  docker-compose.yaml adapté (variables VITE_, volume .next retiré)")
+PYEOF
+    success "docker-compose.yaml adapté pour Vue.js"
+
+    # ── front/Dockerfile adapté (Vite : dev server + build statique servi par `serve`) ──
+    step "Mode Vue.js — génération du front/Dockerfile"
+    cat > "${DEST_DIR}/front/Dockerfile" << DOCKERFILE_EOF
+ARG NODE_VERSION=${NODE_VERSION}
+FROM node:\${NODE_VERSION}-bookworm-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends curl git \\
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+FROM base AS deps
+COPY app/package.json app/package-lock.json* ./
+RUN npm ci
+
+FROM base AS dev
+ENV NODE_ENV=development
+COPY --from=deps /app/node_modules ./node_modules
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+
+FROM base AS builder
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY app/ .
+RUN npm run build
+
+FROM base AS prod
+ENV NODE_ENV=production
+RUN npm install -g serve
+COPY --from=builder /app/dist ./dist
+EXPOSE 3000
+CMD ["serve", "-s", "dist", "-l", "3000"]
+DOCKERFILE_EOF
+    success "front/Dockerfile généré (Vite dev server + build statique via serve)"
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SUPPRESSION OBS DU docker-compose (par défaut, sauf --with-obs)
@@ -704,7 +801,14 @@ fi
 step "Génération du .env"
 
 FRONT_BLOCK=""
-if [[ "$WITH_FRONT" == true ]]; then
+if [[ "$WITH_FRONT" == true ]] && [[ "$FRONT_FRAMEWORK" == "vue" ]]; then
+FRONT_BLOCK="
+# ── Frontend Vue.js (Vite) ────────────────────────────────────────────────────
+NODE_VERSION=${NODE_VERSION}
+FRONT_PORT=${P_FRONT}
+VITE_API_URL=https://localhost:${P_BACK}/api
+VITE_APP_NAME=${PROJECT_PASCAL}"
+elif [[ "$WITH_FRONT" == true ]]; then
 FRONT_BLOCK="
 # ── Frontend Next.js ─────────────────────────────────────────────────────────
 NODE_VERSION=${NODE_VERSION}
@@ -717,7 +821,7 @@ FRONT_BLOCK="
 # Le backend FrankenPHP sert directement les templates Twig.
 # Accès HTTPS : https://localhost:${P_BACK}
 # (après la 1ère visite, le navigateur bascule automatiquement via HSTS)
-# Pour activer Next.js : re-générer avec generate-docker-symfony --spa"
+# Pour activer un frontend séparé : re-générer avec generate-docker-symfony --spa [react|vue]"
 fi
 
 OBS_BLOCK=""
@@ -748,7 +852,7 @@ cat > "${DEST_DIR}/.env" << ENV_EOF
 # ═══════════════════════════════════════════════════════════════════════════════
 #  .env — ${PROJECT_PASCAL}
 #  Généré le $(date '+%Y-%m-%d %H:%M:%S') par generate-docker-symfony
-#  Mode frontend : $([ "$WITH_FRONT" == true ] && echo "Next.js (SPA/SSR)" || echo "Symfony fullstack (Twig)")
+#  Mode frontend : $(frontend_label)
 #  ⚠  Ne jamais commiter ce fichier (contient des secrets)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -810,7 +914,7 @@ success ".env.example généré (secrets masqués)"
 step "Génération du script bootstrap.sh"
 
 if [[ "$WITH_FRONT" == true ]]; then
-    # ── Mode API + Next.js ────────────────────────────────────────────────────
+    # ── Mode API + frontend séparé (Next.js ou Vue.js) ────────────────────────
     # `symfony new` = base minimale (kernel, routing, DI, console).
     # Pas de Twig, pas de rendu HTML — Symfony expose uniquement une API JSON.
     # La CLI Symfony est installée dans l'image FrankenPHP (voir Dockerfile).
@@ -828,12 +932,23 @@ if [[ "$WITH_FRONT" == true ]]; then
         lexik/jwt-authentication-bundle
     )
 
-    FRONT_INIT_BLOCK='step "Initialisation Next.js"
+    if [[ "$FRONT_FRAMEWORK" == "vue" ]]; then
+        # create-vue@latest = CLI officielle Vue (Vite + TypeScript)
+        FRONT_INIT_BLOCK='step "Initialisation Vue.js"
+if [ ! -f front/app/package.json ]; then
+    docker compose run --rm --entrypoint sh front -c \
+        "npx create-vue@latest /app --typescript --eslint --force"
+fi'
+        FRONT_SUMMARY="echo \"  🌐 Frontend  (Vue.js)   : http://localhost:\${FRONT_PORT}\""
+    else
+        # create-next-app@latest = CLI officielle Next.js (React + TypeScript)
+        FRONT_INIT_BLOCK='step "Initialisation Next.js"
 if [ ! -f front/app/package.json ]; then
     docker compose run --rm --entrypoint sh front -c \
         "npx create-next-app@latest /app --typescript --eslint --no-git --yes"
 fi'
-    FRONT_SUMMARY="echo \"  🌐 Frontend  (Next.js)  : http://localhost:\${FRONT_PORT}\""
+        FRONT_SUMMARY="echo \"  🌐 Frontend  (Next.js)  : http://localhost:\${FRONT_PORT}\""
+    fi
 else
     # ── Mode Symfony fullstack (Twig) ─────────────────────────────────────────
     # `symfony new --webapp` installe le meta-package symfony/webapp qui inclut :
@@ -852,7 +967,7 @@ else
         symfony/uid
     )
 
-    FRONT_INIT_BLOCK='# Mode Symfony fullstack — pas de container Next.js
+    FRONT_INIT_BLOCK='# Mode Symfony fullstack — pas de container frontend séparé
 # Les templates Twig sont dans back/app/templates/
 # Les assets sont gérés par AssetMapper (back/app/assets/)'
     FRONT_SUMMARY="# Pas de frontend séparé — Symfony sert le HTML"
@@ -884,7 +999,7 @@ fi
 mkdir -p "${DEST_DIR}/scripts"
 cat > "${DEST_DIR}/scripts/bootstrap.sh" << BOOTSTRAP_EOF
 #!/usr/bin/env bash
-# Mode frontend : $([ "$WITH_FRONT" == true ] && echo "Next.js (SPA/SSR)" || echo "Symfony fullstack (Twig)")
+# Mode frontend : $(frontend_label)
 set -euo pipefail
 
 ROOT="\$(cd "\$(dirname "\$0")/.." && pwd)"
@@ -955,7 +1070,10 @@ success "bootstrap.sh généré"
 # ═══════════════════════════════════════════════════════════════════════════════
 step "Génération du README"
 
-if [[ "$WITH_FRONT" == true ]]; then
+if [[ "$WITH_FRONT" == true ]] && [[ "$FRONT_FRAMEWORK" == "vue" ]]; then
+    FRONT_TABLE_ROW="| Frontend     | http://localhost:${P_FRONT}                      |"
+    STACK_DESC="FrankenPHP · Vue.js (Vite) · PostgreSQL · RabbitMQ"
+elif [[ "$WITH_FRONT" == true ]]; then
     FRONT_TABLE_ROW="| Frontend     | http://localhost:${P_FRONT}                      |"
     STACK_DESC="FrankenPHP · Next.js · PostgreSQL · RabbitMQ"
 else
@@ -975,13 +1093,13 @@ cat > "${DEST_DIR}/README.md" << README_EOF
 # ${PROJECT_PASCAL}
 
 > ${STACK_DESC}
-> Initialisé le $(date '+%Y-%m-%d') avec \`generate-docker-symfony\`$([ "$WITH_FRONT" == true ] && echo "  \`--spa\`")
+> Initialisé le $(date '+%Y-%m-%d') avec \`generate-docker-symfony\`$([ "$WITH_FRONT" == true ] && echo "  \`--spa ${FRONT_FRAMEWORK}\`")
 
 $([ "$WITH_FRONT" == false ] && cat << 'NOFRONT'
 ## Mode Symfony fullstack
 
 Ce projet utilise **Symfony + Twig** pour le rendu HTML côté serveur.
-Il n'y a pas de container Next.js séparé : FrankenPHP sert directement
+Il n'y a pas de container frontend séparé : FrankenPHP sert directement
 les templates et les assets depuis \`back/app/\`.
 
 **Pour créer une page :** ajouter un Controller + un template dans \`back/app/templates/\`.
@@ -1047,12 +1165,14 @@ title "Projet '${PROJECT_PASCAL}' prêt !"
 
 echo ""
 echo -e "  ${W}Répertoire${NC}    ${DEST_DIR}"
-echo -e "  ${W}Mode frontend${NC} $([ "$WITH_FRONT" == true ] && echo 'Next.js (SPA/SSR)' || echo 'Symfony fullstack (Twig)')"
+echo -e "  ${W}Mode frontend${NC} $(frontend_label)"
 echo ""
 echo -e "  ${W}Ports alloués${NC}"
 printf "    %-24s :%-5s  (https://localhost:%s)\n" "Backend HTTPS" "${P_BACK}" "${P_BACK}"
 if [[ "$WITH_FRONT" == true ]]; then
-    printf "    %-24s :%-5s\n" "Frontend (Next.js)" "${P_FRONT}"
+    FRONT_TAG="Next.js"
+    [[ "$FRONT_FRAMEWORK" == "vue" ]] && FRONT_TAG="Vue.js"
+    printf "    %-24s :%-5s\n" "Frontend (${FRONT_TAG})" "${P_FRONT}"
 fi
 printf "    %-24s :%-5s\n" "pgAdmin"         "${P_PGADMIN}"
 printf "    %-24s :%-5s\n" "RabbitMQ UI"     "${P_RABBIT}"
