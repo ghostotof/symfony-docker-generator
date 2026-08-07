@@ -1038,7 +1038,11 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       # Volume nommé : les données survivent aux `docker compose down`.
-      - db_data:/var/lib/postgresql/data
+      # Monté sur /var/lib/postgresql (et non .../data) : depuis Postgres 18,
+      # l'image officielle range les données dans un sous-répertoire versionné
+      # (layout pg_ctlcluster) et refuse de démarrer si le volume pointe
+      # directement sur .../data. Voir docker-library/postgres#1259.
+      - db_data:/var/lib/postgresql
     healthcheck:
       # Permet à `backend` d'attendre que la base accepte réellement les
       # connexions (condition: service_healthy) plutôt que son simple démarrage.
