@@ -428,9 +428,19 @@ RUN set -eux; \
     #   intl      : traductions, formats de dates et de nombres
     #   pdo_pgsql : driver PostgreSQL pour Doctrine
     #   zip       : requis par Composer pour les archives
-    #   opcache   : cache d'opcodes (réglages différents selon la cible)
     #   sockets   : dépendance de plusieurs transports Messenger
-    docker-php-ext-install -j"$(nproc)" intl pdo_pgsql zip opcache sockets; \
+    docker-php-ext-install -j"$(nproc)" intl pdo_pgsql zip sockets; \
+    # opcache : depuis PHP 8.5, il est intégré au binaire et n'est PLUS
+    # construit comme extension partagée. `docker-php-ext-install opcache`
+    # configure alors l'extension, ne compile rien, et échoue à l'installation
+    # avec « cp: can't stat 'modules/*' ». On ne l'installe donc que s'il est
+    # absent : le Dockerfile reste ainsi valable pour PHP 8.4 et antérieurs
+    # comme pour 8.5+, sans avoir à figer une version de PHP.
+    if php -m | grep -qi '^Zend OPcache$'; then \
+        echo "opcache est intégré à cette version de PHP : installation ignorée"; \
+    else \
+        docker-php-ext-install -j"$(nproc)" opcache; \
+    fi; \
     # amqp : transport RabbitMQ natif pour Messenger
     pecl install "amqp-${AMQP_EXT_VERSION}"; \
     docker-php-ext-enable amqp; \
