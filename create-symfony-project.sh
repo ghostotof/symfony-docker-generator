@@ -239,7 +239,14 @@ SYMFONY_CLI_VERSION="$(resolve_github_release "symfony-cli" "symfony-cli/symfony
 AMQP_EXT_VERSION="$(resolve_pecl "ext-amqp" "amqp" "2.1.2")"
 # Xdebug n'est utilisé que par le stage `preprod` (profilage à la demande).
 XDEBUG_VERSION="$(resolve_pecl "ext-xdebug" "xdebug" "3.4.1")"
-SYMFONY_VERSION="$(resolve_packagist "symfony/skeleton" "symfony/skeleton" "7.3.0")"
+# symfony/skeleton ne publie PAS de versions classiques : chaque branche a un
+# unique tag « placeholder » dont le patch vaut toujours 99 (v7.3.99, v8.1.99…).
+# « 8.1.99 » n'est donc pas une version de Symfony, et `symfony new --version=`
+# attend de toute façon une branche (8.1), pas un patch. On ne conserve donc que
+# MAJEUR.MINEUR. Le figeage réel de l'application est assuré par composer.lock,
+# généré à l'initialisation et versionné avec le projet.
+SYMFONY_SKELETON_TAG="$(resolve_packagist "symfony/skeleton" "symfony/skeleton" "7.3.99")"
+SYMFONY_VERSION="${SYMFONY_SKELETON_TAG%.*}"
 
 API_PLATFORM_VERSION=""
 CREATE_VITE_VERSION=""
@@ -259,7 +266,8 @@ printf '  composer       : %s  %s(branche majeure — %s au moment de la génér
 printf '  symfony-cli    : %s\n' "$SYMFONY_CLI_VERSION"
 printf '  ext-amqp       : %s\n' "$AMQP_EXT_VERSION"
 printf '  ext-xdebug     : %s  %s(stage preprod)%s\n' "$XDEBUG_VERSION" "$C_DIM" "$C_RESET"
-printf '  symfony        : %s\n' "$SYMFONY_VERSION"
+printf '  symfony        : %s  %s(branche ; tag skeleton %s)%s\n' \
+       "$SYMFONY_VERSION" "$C_DIM" "$SYMFONY_SKELETON_TAG" "$C_RESET"
 (( WITH_FRONTEND )) && {
 printf '  api-platform   : %s\n' "$API_PLATFORM_VERSION"
 printf '  node           : %s\n' "$NODE_TAG"
@@ -354,6 +362,9 @@ symfony-cli=${SYMFONY_CLI_VERSION}
 ext-amqp=${AMQP_EXT_VERSION}
 ext-xdebug=${XDEBUG_VERSION}
 symfony=${SYMFONY_VERSION}
+# symfony/skeleton n'expose qu'un tag placeholder par branche ; le figeage réel
+# des dépendances applicatives est assuré par backend/composer.lock.
+symfony-skeleton-tag=${SYMFONY_SKELETON_TAG}
 api-platform=${API_PLATFORM_VERSION}
 node=${NODE_TAG}
 create-vite=${CREATE_VITE_VERSION}
