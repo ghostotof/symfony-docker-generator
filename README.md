@@ -1,5 +1,7 @@
 # create-symfony-project.sh
 
+[![Version](https://img.shields.io/github/v/release/ghostotof/symfony-docker-generator?label=version)](https://github.com/ghostotof/symfony-docker-generator/releases/latest)
+
 Script bash de scaffolding qui génère un projet Symfony entièrement dockerisé, prêt à développer et prêt à déployer.
 
 Une exécution produit une arborescence complète : configuration Docker Compose pour le développement local, Dockerfiles multi-stage pour les environnements déployés, et un Makefile qui sert d'interface unique aux opérations courantes.
@@ -46,6 +48,7 @@ create-symfony-project mon-projet --frontend
 - [Le Makefile](#le-makefile)
 - [Déroulé d'une exécution](#déroulé-dune-exécution)
 - [Limites connues](#limites-connues)
+- [Historique des versions](#historique-des-versions)
 
 ---
 
@@ -343,3 +346,22 @@ L'étape 7 est idempotente : si `composer.json` existe déjà, elle ne fait rien
 - **Pas de manifests Kubernetes.** Les stages `production` et `preprod` en sont le prérequis ; le healthcheck FastCGI est déjà prévu pour servir de `livenessProbe`. Reste à écrire la base Kustomize.
 - **Pas de pipeline CI.** Les cibles `build-*` sont conçues pour y être appelées, mais rien n'est généré.
 - **`database` et `rabbitmq` restent des conteneurs de développement.** En déployé, ils ont vocation à être remplacés par des services managés ou des opérateurs (CloudNativePG, RabbitMQ Cluster Operator).
+
+---
+
+## Historique des versions
+
+Les versions suivent [SemVer](https://semver.org/lang/fr/) et sont publiées dans les
+[releases GitHub](https://github.com/ghostotof/symfony-docker-generator/releases).
+
+### v2.0.0 — Nouvelles bases (2026-09-13)
+
+Version majeure : rupture avec la 1.x.
+
+- **Script autonome.** `create-symfony-project.sh` remplace l'ancien `generate-docker-symfony` et le dossier `template/`, supprimés. Toute la génération tient dans un seul fichier.
+- **Versions résolues à l'exécution** puis figées dans `.env` et `versions.lock`, avec valeurs de secours et avertissement en cas d'échec réseau.
+- **Trois cibles d'image** : `dev`, `production`, et `preprod` construite `FROM production`.
+- **Mode `--frontend`** optionnel (Node, Vite, `docker-compose.override.yml`, cibles Makefile du front).
+- **Correctifs** : opcache installé seulement s'il est absent (PHP 8.5+), volume Postgres sur `/var/lib/postgresql`, tag `symfony/skeleton` réduit à `MAJEUR.MINEUR`, `api-platform/doctrine-orm` requis en mode API.
+
+Détail complet : [release v2.0.0](https://github.com/ghostotof/symfony-docker-generator/releases/tag/v2.0.0).
